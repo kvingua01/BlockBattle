@@ -1,7 +1,10 @@
 const socket = io();
 
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const canvas =
+    document.getElementById("gameCanvas");
+
+const ctx =
+    canvas.getContext("2d");
 
 // =====================================================
 // GAME SETTINGS
@@ -26,228 +29,799 @@ const MELEE_COOLDOWN = 350;
 
 const SWORD_SWING_TIME = 220;
 
-const MAX_HEALTH = 20;
+const BASE_MAX_HEALTH = 20;
+
+const DASH_POWER = 15;
+
+const POWERUP_RADIUS = 13;
 
 // =====================================================
 // GAME DATA
 // =====================================================
 
 let myId = null;
+
 let players = {};
+
+let platforms = [];
+
+let powerups = {};
+
 let fireballs = [];
+
 let meleeSwings = {};
+
 let keys = {};
 
 let velocityX = 0;
 let velocityY = 0;
 
 let onGround = false;
+
 let facing = 1;
 
 let spaceHeld = false;
 let spacePressedAt = 0;
 
 let lastMeleeTime = 0;
+
+let lastDashTime = 0;
+
+let lastGreenFireballTime = 0;
+
 let respawnButton = null;
 
-// =====================================================
-// PLATFORMS
-// =====================================================
+let platformMessageUntil = 0;
 
-const platforms = [
-    { x: 0, y: 570, width: 800, height: 30 },
-    { x: 80, y: 490, width: 180, height: 20 },
-    { x: 350, y: 420, width: 180, height: 20 },
-    { x: 100, y: 340, width: 170, height: 20 },
-    { x: 430, y: 270, width: 170, height: 20 },
-    { x: 180, y: 190, width: 170, height: 20 },
-    { x: 450, y: 110, width: 170, height: 20 },
-    { x: 280, y: 40, width: 220, height: 20 }
-];
+let powerupPickupAttempts = {};
 
 // =====================================================
 // CONTROL HELPERS
 // =====================================================
 
 function leftHeld() {
-    return keys["KeyA"] || keys["ArrowLeft"];
+
+    return (
+        keys["KeyA"] ||
+        keys["ArrowLeft"]
+    );
 }
 
 function rightHeld() {
-    return keys["KeyD"] || keys["ArrowRight"];
+
+    return (
+        keys["KeyD"] ||
+        keys["ArrowRight"]
+    );
 }
 
 function jumpHeld() {
-    return keys["KeyW"] || keys["ArrowUp"];
+
+    return (
+        keys["KeyW"] ||
+        keys["ArrowUp"]
+    );
 }
 
 // =====================================================
-// SOCKET EVENTS
+// DASH COOLDOWN
 // =====================================================
 
-socket.on("connect", () => {
-    myId = socket.id;
-});
+function getDashCooldown(player) {
 
-socket.on("currentPlayers", (serverPlayers) => {
-    players = serverPlayers;
-
-    const me = players[myId];
-
-    if (me) {
-        facing = me.facing || 1;
-    }
-});
-
-socket.on("newPlayer", (player) => {
-    players[player.id] = player;
-});
-
-socket.on("playerMoved", (data) => {
-    if (!players[data.id]) return;
-
-    players[data.id].x = data.x;
-    players[data.id].y = data.y;
-
-    if (data.facing === 1 || data.facing === -1) {
-        players[data.id].facing = data.facing;
-    }
-});
-
-socket.on("playerDisconnected", (id) => {
-    delete players[id];
-    delete meleeSwings[id];
-});
-
-socket.on("playerHealthChanged", (data) => {
-    if (!players[data.id]) return;
-
-    players[data.id].health = data.health;
-    players[data.id].dead = data.dead;
-
-    if (data.id === myId && data.dead) {
-        velocityX = 0;
-        velocityY = 0;
-    }
-});
-
-socket.on("playerRespawned", (data) => {
-    if (!players[data.id]) {
-        players[data.id] = {};
+    if (
+        !player ||
+        player.dashLevel <= 0
+    ) {
+        return 0;
     }
 
-    players[data.id].x = data.x;
-    players[data.id].y = data.y;
-    players[data.id].health = data.health;
-    players[data.id].dead = false;
-    players[data.id].facing = data.facing || 1;
+    // Level 1 = 7 sec
+    // Level 2 = 6 sec
+    // Level 3 = 5 sec
+    // Level 4+ = 4 sec
 
-    if (data.id === myId) {
-        velocityX = 0;
-        velocityY = 0;
-        facing = data.facing || 1;
+    return Math.max(
+        4,
+        8 - player.dashLevel
+    ) * 1000;
+}
+
+// =====================================================
+// GREEN FIREBALL COOLDOWN
+// =====================================================
+
+function getGreenCooldown(player) {
+
+    if (
+        !player ||
+        player.greenLevel <= 0
+    ) {
+        return 0;
     }
-});
 
-socket.on("receiveKnockback", (data) => {
-    const me = players[myId];
+    // Level 1 = 2 sec
+    // Level 2 = 1.5 sec
+    // Level 3+ = 1 sec
 
-    if (!me || me.dead) return;
-
-    velocityX += data.velocityX;
-    velocityY += data.velocityY;
-});
-
-socket.on("playerMeleeSwing", (data) => {
-    meleeSwings[data.id] = {
-        start: Date.now(),
-        facing: data.facing
-    };
-});
-
-socket.on("spawnFireball", (fireball) => {
-    fireballs.push(fireball);
-});
-
-socket.on("removeFireball", (data) => {
-    fireballs = fireballs.filter(
-        fireball => fireball.id !== data.id
+    return Math.max(
+        1000,
+        2500 -
+            player.greenLevel * 500
     );
-});
+}
+
+// =====================================================
+// CONNECTION
+// =====================================================
+
+socket.on(
+    "connect",
+    () => {
+
+        myId =
+            socket.id;
+    }
+);
+
+// =====================================================
+// PLATFORM EVENTS
+// =====================================================
+
+socket.on(
+    "platformLayout",
+    (newPlatforms) => {
+
+        platforms =
+            newPlatforms;
+    }
+);
+
+socket.on(
+    "platformLayoutChanged",
+    (newPlatforms) => {
+
+        platforms =
+            newPlatforms;
+
+        platformMessageUntil =
+            Date.now() + 3000;
+
+        const me =
+            players[myId];
+
+        // Put everybody safely back at the bottom
+        // when the map changes.
+        if (
+            me &&
+            !me.dead
+        ) {
+
+            me.x =
+                100 +
+                Math.random() * 300;
+
+            me.y =
+                500;
+
+            velocityX = 0;
+            velocityY = 0;
+
+            onGround = false;
+
+            socket.emit(
+                "playerMove",
+                {
+                    x: me.x,
+                    y: me.y,
+                    facing: facing
+                }
+            );
+        }
+    }
+);
+
+// =====================================================
+// POWERUP EVENTS
+// =====================================================
+
+socket.on(
+    "currentPowerups",
+    (serverPowerups) => {
+
+        powerups =
+            serverPowerups || {};
+    }
+);
+
+socket.on(
+    "powerupSpawned",
+    (powerup) => {
+
+        powerups[
+            powerup.id
+        ] =
+            powerup;
+    }
+);
+
+socket.on(
+    "powerupRemoved",
+    (powerupId) => {
+
+        delete powerups[
+            powerupId
+        ];
+
+        delete powerupPickupAttempts[
+            powerupId
+        ];
+    }
+);
+
+// =====================================================
+// PLAYER EVENTS
+// =====================================================
+
+socket.on(
+    "currentPlayers",
+    (serverPlayers) => {
+
+        players =
+            serverPlayers;
+
+        const me =
+            players[myId];
+
+        if (me) {
+
+            facing =
+                me.facing || 1;
+        }
+    }
+);
+
+socket.on(
+    "newPlayer",
+    (player) => {
+
+        players[
+            player.id
+        ] =
+            player;
+    }
+);
+
+socket.on(
+    "playerMoved",
+    (data) => {
+
+        if (
+            !players[
+                data.id
+            ]
+        ) {
+            return;
+        }
+
+        players[
+            data.id
+        ].x =
+            data.x;
+
+        players[
+            data.id
+        ].y =
+            data.y;
+
+        if (
+            data.facing === 1 ||
+            data.facing === -1
+        ) {
+
+            players[
+                data.id
+            ].facing =
+                data.facing;
+        }
+    }
+);
+
+socket.on(
+    "playerDisconnected",
+    (id) => {
+
+        delete players[id];
+
+        delete meleeSwings[id];
+    }
+);
+
+// =====================================================
+// HEALTH EVENTS
+// =====================================================
+
+socket.on(
+    "playerHealthChanged",
+    (data) => {
+
+        const player =
+            players[
+                data.id
+            ];
+
+        if (!player) {
+            return;
+        }
+
+        player.health =
+            data.health;
+
+        if (
+            data.maxHealth !==
+            undefined
+        ) {
+            player.maxHealth =
+                data.maxHealth;
+        }
+
+        player.dead =
+            data.dead;
+
+        if (
+            data.respawnAllowedAt !==
+            undefined
+        ) {
+
+            player.respawnAllowedAt =
+                data.respawnAllowedAt;
+        }
+
+        if (
+            data.id === myId &&
+            data.dead
+        ) {
+
+            velocityX = 0;
+
+            velocityY = 0;
+
+            spaceHeld = false;
+        }
+    }
+);
+
+// =====================================================
+// POWERUP LEVEL EVENTS
+// =====================================================
+
+socket.on(
+    "playerPowerupChanged",
+    (data) => {
+
+        const player =
+            players[
+                data.id
+            ];
+
+        if (!player) {
+            return;
+        }
+
+        player.health =
+            data.health;
+
+        player.maxHealth =
+            data.maxHealth;
+
+        player.dashLevel =
+            data.dashLevel;
+
+        player.greenLevel =
+            data.greenLevel;
+
+        if (
+            data.id === myId &&
+            data.dashLevel === 0
+        ) {
+
+            lastDashTime = 0;
+        }
+
+        if (
+            data.id === myId &&
+            data.greenLevel === 0
+        ) {
+
+            lastGreenFireballTime = 0;
+        }
+    }
+);
+
+// =====================================================
+// RESPAWN
+// =====================================================
+
+socket.on(
+    "playerRespawned",
+    (data) => {
+
+        if (
+            !players[
+                data.id
+            ]
+        ) {
+
+            players[
+                data.id
+            ] = {};
+        }
+
+        const player =
+            players[
+                data.id
+            ];
+
+        player.x =
+            data.x;
+
+        player.y =
+            data.y;
+
+        player.health =
+            data.health;
+
+        player.maxHealth =
+            data.maxHealth;
+
+        player.dead =
+            false;
+
+        player.facing =
+            data.facing || 1;
+
+        player.dashLevel =
+            data.dashLevel || 0;
+
+        player.greenLevel =
+            data.greenLevel || 0;
+
+        player.respawnAllowedAt =
+            0;
+
+        if (
+            data.id === myId
+        ) {
+
+            velocityX = 0;
+
+            velocityY = 0;
+
+            facing =
+                player.facing;
+
+            lastDashTime = 0;
+
+            lastGreenFireballTime = 0;
+
+            lastMeleeTime = 0;
+        }
+    }
+);
+
+// =====================================================
+// KNOCKBACK
+// =====================================================
+
+socket.on(
+    "receiveKnockback",
+    (data) => {
+
+        const me =
+            players[myId];
+
+        if (
+            !me ||
+            me.dead
+        ) {
+            return;
+        }
+
+        velocityX +=
+            data.velocityX;
+
+        velocityY +=
+            data.velocityY;
+    }
+);
+
+// =====================================================
+// SWORD VISUAL
+// =====================================================
+
+socket.on(
+    "playerMeleeSwing",
+    (data) => {
+
+        meleeSwings[
+            data.id
+        ] = {
+
+            start:
+                Date.now(),
+
+            facing:
+                data.facing
+        };
+    }
+);
+
+// =====================================================
+// FIREBALL EVENTS
+// =====================================================
+
+socket.on(
+    "spawnFireball",
+    (fireball) => {
+
+        fireballs.push(
+            fireball
+        );
+    }
+);
+
+socket.on(
+    "removeFireball",
+    (data) => {
+
+        fireballs =
+            fireballs.filter(
+                fireball =>
+                    fireball.id !==
+                    data.id
+            );
+    }
+);
 
 // =====================================================
 // KEYBOARD
 // =====================================================
 
-document.addEventListener("keydown", (event) => {
+document.addEventListener(
+    "keydown",
+    (event) => {
 
-    if (
-        event.code === "ArrowLeft" ||
-        event.code === "ArrowRight" ||
-        event.code === "ArrowUp" ||
-        event.code === "ArrowDown" ||
-        event.code === "Space"
-    ) {
-        event.preventDefault();
-    }
+        if (
+            event.code === "ArrowLeft" ||
+            event.code === "ArrowRight" ||
+            event.code === "ArrowUp" ||
+            event.code === "ArrowDown" ||
+            event.code === "Space"
+        ) {
 
-    keys[event.code] = true;
+            event.preventDefault();
+        }
 
-    const me = players[myId];
+        keys[
+            event.code
+        ] =
+            true;
 
-    if (!me || me.dead) return;
+        const me =
+            players[myId];
 
-    if (
-        event.code === "Space" &&
-        !spaceHeld
-    ) {
-        spaceHeld = true;
-        spacePressedAt = Date.now();
-    }
-
-    if (
-        event.code === "KeyF" &&
-        !event.repeat
-    ) {
-        performMeleeAttack();
-    }
-});
-
-document.addEventListener("keyup", (event) => {
-
-    if (
-        event.code === "ArrowLeft" ||
-        event.code === "ArrowRight" ||
-        event.code === "ArrowUp" ||
-        event.code === "ArrowDown" ||
-        event.code === "Space"
-    ) {
-        event.preventDefault();
-    }
-
-    keys[event.code] = false;
-
-    if (event.code === "Space") {
-
-        const me = players[myId];
-
-        if (!me || me.dead) {
-            spaceHeld = false;
+        if (
+            !me ||
+            me.dead
+        ) {
             return;
         }
 
-        const heldTime =
-            Date.now() - spacePressedAt;
+        // SPACE ATTACK
+        if (
+            event.code === "Space" &&
+            !spaceHeld
+        ) {
 
-        if (heldTime >= FIREBALL_CHARGE_TIME) {
-            shootFireball();
-        } else {
-            normalShove();
+            spaceHeld =
+                true;
+
+            spacePressedAt =
+                Date.now();
         }
 
-        spaceHeld = false;
+        // F = sword OR green fireball
+        if (
+            event.code === "KeyF" &&
+            !event.repeat
+        ) {
+
+            performFAction();
+        }
+
+        // G = DASH
+        if (
+            event.code === "KeyG" &&
+            !event.repeat
+        ) {
+
+            performDash();
+        }
     }
-});
+);
+
+document.addEventListener(
+    "keyup",
+    (event) => {
+
+        if (
+            event.code === "ArrowLeft" ||
+            event.code === "ArrowRight" ||
+            event.code === "ArrowUp" ||
+            event.code === "ArrowDown" ||
+            event.code === "Space"
+        ) {
+
+            event.preventDefault();
+        }
+
+        keys[
+            event.code
+        ] =
+            false;
+
+        if (
+            event.code ===
+            "Space"
+        ) {
+
+            const me =
+                players[myId];
+
+            if (
+                !me ||
+                me.dead
+            ) {
+
+                spaceHeld =
+                    false;
+
+                return;
+            }
+
+            const heldTime =
+                Date.now() -
+                spacePressedAt;
+
+            if (
+                heldTime >=
+                FIREBALL_CHARGE_TIME
+            ) {
+
+                shootNormalFireball();
+
+            } else {
+
+                normalShove();
+            }
+
+            spaceHeld =
+                false;
+        }
+    }
+);
+
+// =====================================================
+// DASH
+// =====================================================
+
+function performDash() {
+
+    const me =
+        players[myId];
+
+    if (
+        !me ||
+        me.dead ||
+        me.dashLevel <= 0
+    ) {
+        return;
+    }
+
+    const cooldown =
+        getDashCooldown(me);
+
+    const now =
+        Date.now();
+
+    if (
+        now -
+        lastDashTime <
+        cooldown
+    ) {
+        return;
+    }
+
+    lastDashTime =
+        now;
+
+    // Upward dash ONLY if W/Up is held
+    // WITHOUT left/right.
+    const upwardDash =
+        jumpHeld() &&
+        !leftHeld() &&
+        !rightHeld();
+
+    if (
+        upwardDash
+    ) {
+
+        velocityX = 0;
+
+        velocityY =
+            -DASH_POWER;
+
+        onGround =
+            false;
+
+    } else {
+
+        let direction =
+            facing;
+
+        if (
+            leftHeld() &&
+            !rightHeld()
+        ) {
+
+            direction = -1;
+        }
+
+        if (
+            rightHeld() &&
+            !leftHeld()
+        ) {
+
+            direction = 1;
+        }
+
+        facing =
+            direction;
+
+        velocityX =
+            direction *
+            DASH_POWER;
+    }
+}
+
+// =====================================================
+// F BUTTON
+// =====================================================
+
+function performFAction() {
+
+    const me =
+        players[myId];
+
+    if (
+        !me ||
+        me.dead
+    ) {
+        return;
+    }
+
+    // Green perk completely replaces sword.
+    if (
+        me.greenLevel > 0
+    ) {
+
+        shootGreenFireball();
+
+    } else {
+
+        performMeleeAttack();
+    }
+}
 
 // =====================================================
 // NORMAL SHOVE
@@ -255,115 +829,196 @@ document.addEventListener("keyup", (event) => {
 
 function normalShove() {
 
-    const me = players[myId];
+    const me =
+        players[myId];
 
-    if (!me || me.dead) return;
+    if (
+        !me ||
+        me.dead
+    ) {
+        return;
+    }
 
-    for (const id in players) {
+    for (
+        const id in players
+    ) {
 
-        if (id === myId) continue;
+        if (
+            id === myId
+        ) {
+            continue;
+        }
 
-        const target = players[id];
+        const target =
+            players[id];
 
-        if (!target || target.dead) continue;
+        if (
+            !target ||
+            target.dead
+        ) {
+            continue;
+        }
 
-        const myCenterX =
-            me.x + PLAYER_SIZE / 2;
+        const myX =
+            me.x +
+            PLAYER_SIZE / 2;
 
-        const myCenterY =
-            me.y + PLAYER_SIZE / 2;
+        const myY =
+            me.y +
+            PLAYER_SIZE / 2;
 
-        const targetCenterX =
-            target.x + PLAYER_SIZE / 2;
+        const targetX =
+            target.x +
+            PLAYER_SIZE / 2;
 
-        const targetCenterY =
-            target.y + PLAYER_SIZE / 2;
+        const targetY =
+            target.y +
+            PLAYER_SIZE / 2;
 
         const dx =
-            targetCenterX - myCenterX;
+            targetX - myX;
 
         const dy =
-            targetCenterY - myCenterY;
+            targetY - myY;
 
         const distance =
-            Math.sqrt(dx * dx + dy * dy);
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
 
-        if (distance <= NORMAL_SHOVE_RANGE) {
+        if (
+            distance <=
+            NORMAL_SHOVE_RANGE
+        ) {
 
             const direction =
-                dx >= 0 ? 1 : -1;
+                dx >= 0
+                    ? 1
+                    : -1;
 
-            socket.emit("knockbackPlayer", {
-                targetId: id,
-                velocityX:
-                    direction * NORMAL_KNOCKBACK,
-                velocityY: -4
-            });
+            socket.emit(
+                "knockbackPlayer",
+                {
+                    targetId:
+                        id,
+
+                    velocityX:
+                        direction *
+                        NORMAL_KNOCKBACK,
+
+                    velocityY:
+                        -4
+                }
+            );
         }
     }
 }
 
 // =====================================================
-// SWORD ATTACK
+// SWORD
 // =====================================================
 
 function performMeleeAttack() {
 
-    const me = players[myId];
-
-    if (!me || me.dead) return;
-
-    const now = Date.now();
+    const me =
+        players[myId];
 
     if (
-        now - lastMeleeTime <
-        MELEE_COOLDOWN
+        !me ||
+        me.dead ||
+        me.greenLevel > 0
     ) {
         return;
     }
 
-    lastMeleeTime = now;
+    const now =
+        Date.now();
 
-    meleeSwings[myId] = {
-        start: now,
-        facing: facing
+    if (
+        now -
+        lastMeleeTime <
+        MELEE_COOLDOWN
+    ) {
+
+        return;
+    }
+
+    lastMeleeTime =
+        now;
+
+    meleeSwings[
+        myId
+    ] = {
+
+        start:
+            now,
+
+        facing:
+            facing
     };
 
-    socket.emit("meleeSwing", {
-        facing: facing
-    });
+    socket.emit(
+        "meleeSwing",
+        {
+            facing:
+                facing
+        }
+    );
 
-    let closestTarget = null;
-    let closestDistance = Infinity;
+    let closestTarget =
+        null;
 
-    for (const id in players) {
+    let closestDistance =
+        Infinity;
 
-        if (id === myId) continue;
+    for (
+        const id in players
+    ) {
 
-        const target = players[id];
+        if (
+            id === myId
+        ) {
+            continue;
+        }
 
-        if (!target || target.dead) continue;
+        const target =
+            players[id];
 
-        const myCenterX =
-            me.x + PLAYER_SIZE / 2;
+        if (
+            !target ||
+            target.dead
+        ) {
+            continue;
+        }
 
-        const myCenterY =
-            me.y + PLAYER_SIZE / 2;
+        const myX =
+            me.x +
+            PLAYER_SIZE / 2;
 
-        const targetCenterX =
-            target.x + PLAYER_SIZE / 2;
+        const myY =
+            me.y +
+            PLAYER_SIZE / 2;
 
-        const targetCenterY =
-            target.y + PLAYER_SIZE / 2;
+        const targetX =
+            target.x +
+            PLAYER_SIZE / 2;
+
+        const targetY =
+            target.y +
+            PLAYER_SIZE / 2;
 
         const dx =
-            targetCenterX - myCenterX;
+            targetX - myX;
 
         const dy =
-            targetCenterY - myCenterY;
+            targetY - myY;
 
         const distance =
-            Math.sqrt(dx * dx + dy * dy);
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
 
         const inFront =
             facing === 1
@@ -372,60 +1027,92 @@ function performMeleeAttack() {
 
         if (
             inFront &&
-            distance <= MELEE_RANGE &&
-            distance < closestDistance
+            distance <=
+                MELEE_RANGE &&
+            distance <
+                closestDistance
         ) {
-            closestDistance = distance;
 
-            closestTarget = {
-                id: id,
-                player: target
-            };
+            closestDistance =
+                distance;
+
+            closestTarget =
+                id;
         }
     }
 
-    if (!closestTarget) return;
+    if (
+        !closestTarget
+    ) {
+        return;
+    }
 
-    socket.emit("meleeHit", {
-        targetId: closestTarget.id,
-        velocityX:
-            facing * MELEE_KNOCKBACK
-    });
+    socket.emit(
+        "meleeHit",
+        {
+            targetId:
+                closestTarget,
+
+            velocityX:
+                facing *
+                MELEE_KNOCKBACK
+        }
+    );
 }
 
 // =====================================================
-// FIREBALL
+// NORMAL FIREBALL
 // =====================================================
 
-function shootFireball() {
+function shootNormalFireball() {
 
-    const me = players[myId];
+    const me =
+        players[myId];
 
-    if (!me || me.dead) return;
+    if (
+        !me ||
+        me.dead
+    ) {
+        return;
+    }
 
     const fireball = {
+
         id:
             myId +
-            "-" +
+            "-normal-" +
             Date.now() +
             "-" +
             Math.random(),
 
-        ownerId: myId,
+        ownerId:
+            myId,
+
+        type:
+            "normal",
 
         x:
-            me.x + PLAYER_SIZE / 2,
+            me.x +
+            PLAYER_SIZE / 2,
 
         y:
-            me.y + PLAYER_SIZE / 2,
+            me.y +
+            PLAYER_SIZE / 2,
 
         velocityX:
-            facing * FIREBALL_SPEED,
+            facing *
+            FIREBALL_SPEED,
 
-        radius: 10
+        velocityY:
+            0,
+
+        radius:
+            10
     };
 
-    fireballs.push(fireball);
+    fireballs.push(
+        fireball
+    );
 
     socket.emit(
         "shootFireball",
@@ -434,14 +1121,215 @@ function shootFireball() {
 }
 
 // =====================================================
-// UPDATE FIREBALLS
+// GREEN FIREBALL
+// =====================================================
+
+function shootGreenFireball() {
+
+    const me =
+        players[myId];
+
+    if (
+        !me ||
+        me.dead ||
+        me.greenLevel <= 0
+    ) {
+        return;
+    }
+
+    const cooldown =
+        getGreenCooldown(me);
+
+    const now =
+        Date.now();
+
+    if (
+        now -
+        lastGreenFireballTime <
+        cooldown
+    ) {
+        return;
+    }
+
+    lastGreenFireballTime =
+        now;
+
+    let velocityX =
+        facing *
+        FIREBALL_SPEED;
+
+    let velocityY =
+        0;
+
+    // 25% chance to home toward nearest player.
+    const homingShot =
+        Math.random() < 0.25;
+
+    if (
+        homingShot
+    ) {
+
+        let nearestPlayer =
+            null;
+
+        let nearestDistance =
+            Infinity;
+
+        for (
+            const id in players
+        ) {
+
+            if (
+                id === myId
+            ) {
+                continue;
+            }
+
+            const target =
+                players[id];
+
+            if (
+                !target ||
+                target.dead
+            ) {
+                continue;
+            }
+
+            const dx =
+                target.x -
+                me.x;
+
+            const dy =
+                target.y -
+                me.y;
+
+            const distance =
+                Math.sqrt(
+                    dx * dx +
+                    dy * dy
+                );
+
+            if (
+                distance <
+                nearestDistance
+            ) {
+
+                nearestDistance =
+                    distance;
+
+                nearestPlayer =
+                    target;
+            }
+        }
+
+        if (
+            nearestPlayer
+        ) {
+
+            const startX =
+                me.x +
+                PLAYER_SIZE / 2;
+
+            const startY =
+                me.y +
+                PLAYER_SIZE / 2;
+
+            const targetX =
+                nearestPlayer.x +
+                PLAYER_SIZE / 2;
+
+            const targetY =
+                nearestPlayer.y +
+                PLAYER_SIZE / 2;
+
+            const dx =
+                targetX -
+                startX;
+
+            const dy =
+                targetY -
+                startY;
+
+            const length =
+                Math.sqrt(
+                    dx * dx +
+                    dy * dy
+                ) || 1;
+
+            velocityX =
+                (
+                    dx /
+                    length
+                ) *
+                FIREBALL_SPEED;
+
+            velocityY =
+                (
+                    dy /
+                    length
+                ) *
+                FIREBALL_SPEED;
+        }
+    }
+
+    const fireball = {
+
+        id:
+            myId +
+            "-green-" +
+            Date.now() +
+            "-" +
+            Math.random(),
+
+        ownerId:
+            myId,
+
+        type:
+            "green",
+
+        x:
+            me.x +
+            PLAYER_SIZE / 2,
+
+        y:
+            me.y +
+            PLAYER_SIZE / 2,
+
+        velocityX:
+            velocityX,
+
+        velocityY:
+            velocityY,
+
+        radius:
+            11,
+
+        homingShot:
+            homingShot
+    };
+
+    fireballs.push(
+        fireball
+    );
+
+    socket.emit(
+        "shootGreenFireball",
+        fireball
+    );
+}
+
+// =====================================================
+// FIREBALL UPDATE
 // =====================================================
 
 function updateFireballs() {
 
     for (
-        let i = fireballs.length - 1;
+        let i =
+            fireballs.length - 1;
+
         i >= 0;
+
         i--
     ) {
 
@@ -451,38 +1339,56 @@ function updateFireballs() {
         fireball.x +=
             fireball.velocityX;
 
+        fireball.y +=
+            fireball.velocityY || 0;
+
         if (
             fireball.x < -100 ||
             fireball.x >
-                canvas.width + 100
+                canvas.width + 100 ||
+            fireball.y < -100 ||
+            fireball.y >
+                canvas.height + 100
         ) {
 
             if (
-                fireball.ownerId === myId
+                fireball.ownerId ===
+                myId
             ) {
+
                 socket.emit(
                     "removeFireball",
                     {
-                        id: fireball.id
+                        id:
+                            fireball.id
                     }
                 );
             }
 
-            fireballs.splice(i, 1);
+            fireballs.splice(
+                i,
+                1
+            );
 
             continue;
         }
 
+        // Only owner decides collisions.
         if (
-            fireball.ownerId !== myId
+            fireball.ownerId !==
+            myId
         ) {
+
             continue;
         }
 
-        for (const id in players) {
+        for (
+            const id in players
+        ) {
 
             if (
-                id === fireball.ownerId
+                id ===
+                fireball.ownerId
             ) {
                 continue;
             }
@@ -490,21 +1396,28 @@ function updateFireballs() {
             const target =
                 players[id];
 
-            if (!target || target.dead) {
+            if (
+                !target ||
+                target.dead
+            ) {
                 continue;
             }
 
             const centerX =
-                target.x + PLAYER_SIZE / 2;
+                target.x +
+                PLAYER_SIZE / 2;
 
             const centerY =
-                target.y + PLAYER_SIZE / 2;
+                target.y +
+                PLAYER_SIZE / 2;
 
             const dx =
-                fireball.x - centerX;
+                fireball.x -
+                centerX;
 
             const dy =
-                fireball.y - centerY;
+                fireball.y -
+                centerY;
 
             const distance =
                 Math.sqrt(
@@ -518,39 +1431,69 @@ function updateFireballs() {
                     PLAYER_SIZE / 2
             ) {
 
-                socket.emit(
-                    "fireballHit",
-                    {
-                        targetId: id
-                    }
-                );
+                if (
+                    fireball.type ===
+                    "green"
+                ) {
 
-                const direction =
-                    fireball.velocityX >= 0
-                        ? 1
-                        : -1;
+                    socket.emit(
+                        "greenFireballHit",
+                        {
+                            targetId:
+                                id,
 
-                socket.emit(
-                    "knockbackPlayer",
-                    {
-                        targetId: id,
+                            direction:
+                                fireball.velocityX <
+                                0
+                                    ? -1
+                                    : 1
+                        }
+                    );
 
-                        velocityX:
-                            direction *
-                            FIREBALL_KNOCKBACK,
+                } else {
 
-                        velocityY: -10
-                    }
-                );
+                    socket.emit(
+                        "fireballHit",
+                        {
+                            targetId:
+                                id
+                        }
+                    );
+
+                    const direction =
+                        fireball.velocityX >=
+                        0
+                            ? 1
+                            : -1;
+
+                    socket.emit(
+                        "knockbackPlayer",
+                        {
+                            targetId:
+                                id,
+
+                            velocityX:
+                                direction *
+                                FIREBALL_KNOCKBACK,
+
+                            velocityY:
+                                -10
+                        }
+                    );
+                }
 
                 socket.emit(
                     "removeFireball",
                     {
-                        id: fireball.id
+                        id:
+                            fireball.id
                     }
                 );
 
-                fireballs.splice(i, 1);
+                fireballs.splice(
+                    i,
+                    1
+                );
 
                 break;
             }
@@ -559,104 +1502,220 @@ function updateFireballs() {
 }
 
 // =====================================================
-// UPDATE PLAYER
+// POWERUP PICKUP CHECK
+// =====================================================
+
+function updatePowerupPickup() {
+
+    const me =
+        players[myId];
+
+    if (
+        !me ||
+        me.dead
+    ) {
+        return;
+    }
+
+    const myX =
+        me.x +
+        PLAYER_SIZE / 2;
+
+    const myY =
+        me.y +
+        PLAYER_SIZE / 2;
+
+    const now =
+        Date.now();
+
+    for (
+        const id in powerups
+    ) {
+
+        const powerup =
+            powerups[id];
+
+        const dx =
+            myX -
+            powerup.x;
+
+        const dy =
+            myY -
+            powerup.y;
+
+        const distance =
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
+
+        if (
+            distance <
+            PLAYER_SIZE / 2 +
+                POWERUP_RADIUS
+        ) {
+
+            const lastAttempt =
+                powerupPickupAttempts[
+                    id
+                ] || 0;
+
+            if (
+                now -
+                lastAttempt >
+                500
+            ) {
+
+                powerupPickupAttempts[
+                    id
+                ] =
+                    now;
+
+                socket.emit(
+                    "pickupPowerup",
+                    id
+                );
+            }
+        }
+    }
+}
+
+// =====================================================
+// PLAYER MOVEMENT
 // =====================================================
 
 function updatePlayer() {
 
-    const me = players[myId];
+    const me =
+        players[myId];
 
-    if (!me) return;
+    if (!me) {
+        return;
+    }
 
-    if (me.dead) {
+    if (
+        me.dead
+    ) {
+
         velocityX = 0;
+
         velocityY = 0;
+
         return;
     }
 
     // LEFT
-    // A or LEFT ARROW
     if (
         leftHeld() &&
         !rightHeld()
     ) {
-        velocityX = -MOVE_SPEED;
 
-        // Remember last direction moved.
-        facing = -1;
+        velocityX =
+            -MOVE_SPEED;
+
+        facing =
+            -1;
     }
 
     // RIGHT
-    // D or RIGHT ARROW
     else if (
         rightHeld() &&
         !leftHeld()
     ) {
-        velocityX = MOVE_SPEED;
 
-        // Remember last direction moved.
-        facing = 1;
+        velocityX =
+            MOVE_SPEED;
+
+        facing =
+            1;
     }
 
     else {
-        velocityX *= 0.8;
+
+        velocityX *=
+            0.8;
 
         if (
-            Math.abs(velocityX) < 0.1
+            Math.abs(
+                velocityX
+            ) < 0.1
         ) {
-            velocityX = 0;
+
+            velocityX =
+                0;
         }
     }
 
-    // W or UP ARROW
-    // Holding it keeps auto-jump working.
+    // HOLD W / UP TO AUTO-JUMP
     if (
         jumpHeld() &&
         onGround
     ) {
-        velocityY = -JUMP_POWER;
-        onGround = false;
+
+        velocityY =
+            -JUMP_POWER;
+
+        onGround =
+            false;
     }
 
-    me.x += velocityX;
+    me.x +=
+        velocityX;
 
-    if (me.x < 0) {
+    if (
+        me.x < 0
+    ) {
+
         me.x = 0;
     }
 
     if (
         me.x >
-        canvas.width - PLAYER_SIZE
+        canvas.width -
+            PLAYER_SIZE
     ) {
+
         me.x =
-            canvas.width - PLAYER_SIZE;
+            canvas.width -
+            PLAYER_SIZE;
     }
 
-    const oldY = me.y;
+    const oldY =
+        me.y;
 
-    velocityY += GRAVITY;
+    velocityY +=
+        GRAVITY;
 
-    me.y += velocityY;
+    me.y +=
+        velocityY;
 
-    onGround = false;
+    onGround =
+        false;
 
-    // PLATFORM COLLISION
-    if (velocityY >= 0) {
+    if (
+        velocityY >= 0
+    ) {
 
-        for (const platform of platforms) {
+        for (
+            const platform
+            of platforms
+        ) {
 
             const oldBottom =
-                oldY + PLAYER_SIZE;
+                oldY +
+                PLAYER_SIZE;
 
             const newBottom =
-                me.y + PLAYER_SIZE;
+                me.y +
+                PLAYER_SIZE;
 
             const overlapsX =
-                me.x + PLAYER_SIZE >
+                me.x +
+                    PLAYER_SIZE >
                     platform.x &&
                 me.x <
                     platform.x +
-                    platform.width;
+                        platform.width;
 
             const crossedTop =
                 oldBottom <=
@@ -668,42 +1727,57 @@ function updatePlayer() {
                 overlapsX &&
                 crossedTop
             ) {
+
                 me.y =
                     platform.y -
                     PLAYER_SIZE;
 
-                velocityY = 0;
+                velocityY =
+                    0;
 
-                onGround = true;
+                onGround =
+                    true;
 
                 break;
             }
         }
     }
 
-    // FALL OFF BOTTOM
+    // Falling off map does not count as a combat death.
     if (
         me.y >
-        canvas.height + 100
+        canvas.height +
+            100
     ) {
+
         me.x =
             100 +
             Math.random() * 300;
 
-        me.y = 500;
+        me.y =
+            500;
 
-        velocityX = 0;
-        velocityY = 0;
+        velocityX =
+            0;
+
+        velocityY =
+            0;
     }
 
-    me.facing = facing;
+    me.facing =
+        facing;
 
     socket.emit(
         "playerMove",
         {
-            x: me.x,
-            y: me.y,
-            facing: facing
+            x:
+                me.x,
+
+            y:
+                me.y,
+
+            facing:
+                facing
         }
     );
 }
@@ -714,25 +1788,23 @@ function updatePlayer() {
 
 function drawEye(player) {
 
-    // Which direction is this cube looking?
     const lookDirection =
         player.facing === -1
             ? -1
             : 1;
 
-    // IMPORTANT:
-    // We are NOT changing the cube itself.
-    // This only draws a small black eye
-    // ON TOP of the existing colored square.
+    const eyeWidth =
+        5;
 
-    const eyeWidth = 5;
-    const eyeHeight = 13;
+    const eyeHeight =
+        13;
 
     let eyeX;
 
-    if (lookDirection === 1) {
+    if (
+        lookDirection === 1
+    ) {
 
-        // Looking RIGHT
         eyeX =
             player.x +
             PLAYER_SIZE -
@@ -741,17 +1813,17 @@ function drawEye(player) {
 
     } else {
 
-        // Looking LEFT
         eyeX =
-            player.x + 4;
+            player.x +
+            4;
     }
 
     const eyeY =
         player.y +
         7;
 
-    // Black vertical eye
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle =
+        "#000000";
 
     ctx.beginPath();
 
@@ -767,36 +1839,64 @@ function drawEye(player) {
 }
 
 // =====================================================
-// DRAW HEARTS
+// HEARTS
 // =====================================================
 
 function drawHearts(
     x,
     y,
-    health
+    health,
+    maxHealth
 ) {
 
-    ctx.font = "24px Arial";
+    const totalHearts =
+        Math.ceil(
+            maxHealth / 2
+        );
+
+    ctx.font =
+        "22px Arial";
 
     for (
         let heart = 0;
-        heart < 10;
+
+        heart <
+        totalHearts;
+
         heart++
     ) {
+
+        const row =
+            Math.floor(
+                heart / 10
+            );
+
+        const column =
+            heart % 10;
+
+        const heartX =
+            x +
+            column * 23;
+
+        const heartY =
+            y +
+            row * 23;
 
         const amount =
             health -
             heart * 2;
 
-        if (amount >= 2) {
+        if (
+            amount >= 2
+        ) {
 
             ctx.fillStyle =
                 "#ff3030";
 
             ctx.fillText(
                 "♥",
-                x + heart * 25,
-                y
+                heartX,
+                heartY
             );
 
         } else if (
@@ -808,8 +1908,8 @@ function drawHearts(
 
             ctx.fillText(
                 "♥",
-                x + heart * 25,
-                y
+                heartX,
+                heartY
             );
 
         } else {
@@ -819,15 +1919,15 @@ function drawHearts(
 
             ctx.fillText(
                 "♡",
-                x + heart * 25,
-                y
+                heartX,
+                heartY
             );
         }
     }
 }
 
 // =====================================================
-// DRAW SWORD
+// SWORD DRAWING
 // =====================================================
 
 function drawSword(
@@ -886,8 +1986,11 @@ function drawSword(
         player.y +
         PLAYER_SIZE / 2;
 
-    const handleLength = 8;
-    const bladeLength = 38;
+    const handleLength =
+        8;
+
+    const bladeLength =
+        38;
 
     const handleEndX =
         handX +
@@ -915,11 +2018,11 @@ function drawSword(
             bladeLength
         );
 
-    // Handle
     ctx.strokeStyle =
         "#8b5a2b";
 
-    ctx.lineWidth = 7;
+    ctx.lineWidth =
+        7;
 
     ctx.beginPath();
 
@@ -935,11 +2038,11 @@ function drawSword(
 
     ctx.stroke();
 
-    // Blade
     ctx.strokeStyle =
         "#e8edf2";
 
-    ctx.lineWidth = 6;
+    ctx.lineWidth =
+        6;
 
     ctx.beginPath();
 
@@ -955,11 +2058,11 @@ function drawSword(
 
     ctx.stroke();
 
-    // Blade highlight
     ctx.strokeStyle =
         "#ffffff";
 
-    ctx.lineWidth = 2;
+    ctx.lineWidth =
+        2;
 
     ctx.beginPath();
 
@@ -977,7 +2080,110 @@ function drawSword(
 }
 
 // =====================================================
-// DRAW GAME
+// DRAW POWERUPS
+// =====================================================
+
+function drawPowerup(
+    powerup
+) {
+
+    ctx.save();
+
+    ctx.translate(
+        powerup.x,
+        powerup.y
+    );
+
+    ctx.beginPath();
+
+    ctx.arc(
+        0,
+        0,
+        POWERUP_RADIUS,
+        0,
+        Math.PI * 2
+    );
+
+    if (
+        powerup.type ===
+        "health"
+    ) {
+
+        ctx.fillStyle =
+            "#ff3b30";
+
+    } else if (
+        powerup.type ===
+        "dash"
+    ) {
+
+        ctx.fillStyle =
+            "#4fd5ff";
+
+    } else {
+
+        ctx.fillStyle =
+            "#32ff5a";
+    }
+
+    ctx.fill();
+
+    ctx.strokeStyle =
+        "#ffffff";
+
+    ctx.lineWidth =
+        2;
+
+    ctx.stroke();
+
+    ctx.fillStyle =
+        "#ffffff";
+
+    ctx.font =
+        "bold 15px Arial";
+
+    ctx.textAlign =
+        "center";
+
+    ctx.textBaseline =
+        "middle";
+
+    if (
+        powerup.type ===
+        "health"
+    ) {
+
+        ctx.fillText(
+            "+",
+            0,
+            0
+        );
+
+    } else if (
+        powerup.type ===
+        "dash"
+    ) {
+
+        ctx.fillText(
+            "G",
+            0,
+            0
+        );
+
+    } else {
+
+        ctx.fillText(
+            "F",
+            0,
+            0
+        );
+    }
+
+    ctx.restore();
+}
+
+// =====================================================
+// DRAW
 // =====================================================
 
 function draw() {
@@ -989,7 +2195,7 @@ function draw() {
         canvas.height
     );
 
-    // BACKGROUND
+    // Background
     ctx.fillStyle =
         "#11111b";
 
@@ -1000,7 +2206,7 @@ function draw() {
         canvas.height
     );
 
-    // PLATFORMS
+    // Platforms
     ctx.fillStyle =
         "#dddddd";
 
@@ -1017,36 +2223,34 @@ function draw() {
         );
     }
 
-    // =================================================
-    // PLAYERS
-    // =================================================
-
+    // Powerups
     for (
-        const id
-        in players
+        const id in powerups
+    ) {
+
+        drawPowerup(
+            powerups[id]
+        );
+    }
+
+    // Players
+    for (
+        const id in players
     ) {
 
         const player =
             players[id];
 
-        if (!player) continue;
-
-        if (player.dead) {
-
-            ctx.globalAlpha =
-                0.25;
-
-        } else {
-
-            ctx.globalAlpha =
-                1;
+        if (!player) {
+            continue;
         }
 
-        // ---------------------------------------------
-        // ORIGINAL CUBE
-        // ---------------------------------------------
-        // Same exact colored square as before.
+        ctx.globalAlpha =
+            player.dead
+                ? 0.25
+                : 1;
 
+        // SAME ORIGINAL CUBE
         ctx.fillStyle =
             player.color ||
             "#ffffff";
@@ -1058,17 +2262,15 @@ function draw() {
             PLAYER_SIZE
         );
 
-        // ---------------------------------------------
-        // NEW EYE
-        // ---------------------------------------------
-        // This is the ONLY visual addition
-        // to the character.
+        // Eye only
+        drawEye(
+            player
+        );
 
-        drawEye(player);
+        ctx.globalAlpha =
+            1;
 
-        ctx.globalAlpha = 1;
-
-        // YOU LABEL
+        // YOU
         if (
             id === myId
         ) {
@@ -1086,10 +2288,14 @@ function draw() {
             );
         }
 
-        // HEALTH BAR
+        // Health bar
+        const maxHealth =
+            player.maxHealth ||
+            BASE_MAX_HEALTH;
+
         const health =
             player.health ??
-            MAX_HEALTH;
+            maxHealth;
 
         ctx.fillStyle =
             "#333333";
@@ -1102,7 +2308,8 @@ function draw() {
         );
 
         ctx.fillStyle =
-            health > 6
+            health >
+                maxHealth * 0.3
                 ? "#32d74b"
                 : "#ff453a";
 
@@ -1113,17 +2320,20 @@ function draw() {
             PLAYER_SIZE *
                 (
                     health /
-                    MAX_HEALTH
+                    maxHealth
                 ),
 
             3
         );
 
-        // SWORD
+        // Sword only if no green perk.
         const swing =
             meleeSwings[id];
 
-        if (swing) {
+        if (
+            swing &&
+            !player.greenLevel
+        ) {
 
             const elapsed =
                 Date.now() -
@@ -1141,15 +2351,14 @@ function draw() {
 
             } else {
 
-                delete meleeSwings[id];
+                delete meleeSwings[
+                    id
+                ];
             }
         }
     }
 
-    // =================================================
-    // FIREBALLS
-    // =================================================
-
+    // Fireballs
     for (
         const fireball
         of fireballs
@@ -1165,8 +2374,19 @@ function draw() {
             Math.PI * 2
         );
 
-        ctx.fillStyle =
-            "#ff7b00";
+        if (
+            fireball.type ===
+            "green"
+        ) {
+
+            ctx.fillStyle =
+                "#00ff55";
+
+        } else {
+
+            ctx.fillStyle =
+                "#ff7b00";
+        }
 
         ctx.fill();
 
@@ -1175,34 +2395,56 @@ function draw() {
         ctx.arc(
             fireball.x,
             fireball.y,
-            5,
+            Math.max(
+                3,
+                fireball.radius / 2
+            ),
             0,
             Math.PI * 2
         );
 
-        ctx.fillStyle =
-            "#ffe600";
+        if (
+            fireball.type ===
+            "green"
+        ) {
+
+            ctx.fillStyle =
+                "#c8ff00";
+
+        } else {
+
+            ctx.fillStyle =
+                "#ffe600";
+        }
 
         ctx.fill();
     }
 
-    // =================================================
-    // HUD
-    // =================================================
-
     const me =
         players[myId];
 
+    // =================================================
+    // HEALTH HUD
+    // =================================================
+
     if (me) {
 
+        const maxHealth =
+            me.maxHealth ||
+            BASE_MAX_HEALTH;
+
+        const health =
+            me.health ??
+            maxHealth;
+
         ctx.fillStyle =
-            "rgba(0,0,0,0.75)";
+            "rgba(0,0,0,0.76)";
 
         ctx.fillRect(
             12,
             10,
-            310,
-            115
+            260,
+            145
         );
 
         ctx.fillStyle =
@@ -1214,26 +2456,14 @@ function draw() {
         ctx.fillText(
             "YOUR HEALTH",
             25,
-            34
+            32
         );
 
         drawHearts(
             25,
-            64,
-            me.health ??
-                MAX_HEALTH
-        );
-
-        ctx.fillStyle =
-            "#ffffff";
-
-        ctx.font =
-            "14px Arial";
-
-        ctx.fillText(
-            "Sword hit = 1/2 heart",
-            25,
-            91
+            59,
+            health,
+            maxHealth
         );
 
         ctx.fillStyle =
@@ -1243,14 +2473,172 @@ function draw() {
             "12px Arial";
 
         ctx.fillText(
-            "WASD or Arrows | F Sword | Space Attack",
+            "F = Sword / Green Fireball",
             25,
-            112
+            116
+        );
+
+        ctx.fillText(
+            "G = Dash when unlocked",
+            25,
+            134
         );
     }
 
     // =================================================
-    // FIREBALL CHARGE BAR
+    // UPGRADE HUD
+    // =================================================
+
+    if (
+        me &&
+        !me.dead
+    ) {
+
+        ctx.fillStyle =
+            "rgba(0,0,0,0.76)";
+
+        ctx.fillRect(
+            585,
+            10,
+            203,
+            112
+        );
+
+        ctx.fillStyle =
+            "#ffffff";
+
+        ctx.font =
+            "bold 14px Arial";
+
+        ctx.fillText(
+            "POWERUPS",
+            600,
+            31
+        );
+
+        const bonusHearts =
+            Math.max(
+                0,
+                (
+                    (
+                        me.maxHealth ||
+                        BASE_MAX_HEALTH
+                    ) -
+                    BASE_MAX_HEALTH
+                ) / 2
+            );
+
+        ctx.font =
+            "12px Arial";
+
+        ctx.fillStyle =
+            "#ff6b63";
+
+        ctx.fillText(
+            "Health: +" +
+                bonusHearts +
+                " hearts",
+            600,
+            53
+        );
+
+        ctx.fillStyle =
+            "#4fd5ff";
+
+        if (
+            me.dashLevel > 0
+        ) {
+
+            const cooldown =
+                getDashCooldown(me);
+
+            const remaining =
+                Math.max(
+                    0,
+                    cooldown -
+                        (
+                            Date.now() -
+                            lastDashTime
+                        )
+                );
+
+            const dashText =
+                remaining <= 0
+                    ? "READY"
+                    : (
+                        remaining /
+                        1000
+                    ).toFixed(1) +
+                    "s";
+
+            ctx.fillText(
+                "Dash Lv " +
+                    me.dashLevel +
+                    ": " +
+                    dashText,
+                600,
+                74
+            );
+
+        } else {
+
+            ctx.fillText(
+                "Dash: locked",
+                600,
+                74
+            );
+        }
+
+        ctx.fillStyle =
+            "#32ff5a";
+
+        if (
+            me.greenLevel > 0
+        ) {
+
+            const cooldown =
+                getGreenCooldown(me);
+
+            const remaining =
+                Math.max(
+                    0,
+                    cooldown -
+                        (
+                            Date.now() -
+                            lastGreenFireballTime
+                        )
+                );
+
+            const greenText =
+                remaining <= 0
+                    ? "READY"
+                    : (
+                        remaining /
+                        1000
+                    ).toFixed(1) +
+                    "s";
+
+            ctx.fillText(
+                "Green Lv " +
+                    me.greenLevel +
+                    ": " +
+                    greenText,
+                600,
+                95
+            );
+
+        } else {
+
+            ctx.fillText(
+                "Green Fireball: locked",
+                600,
+                95
+            );
+        }
+    }
+
+    // =================================================
+    // CHARGE BAR
     // =================================================
 
     if (
@@ -1270,13 +2658,15 @@ function draw() {
                 1
             );
 
-        const barWidth = 250;
+        const barWidth =
+            240;
 
         const x =
             canvas.width / 2 -
             barWidth / 2;
 
-        const y = 15;
+        const y =
+            15;
 
         ctx.fillStyle =
             "#333333";
@@ -1333,7 +2723,45 @@ function draw() {
     }
 
     // =================================================
-    // DEATH / RESPAWN
+    // MAP CHANGE MESSAGE
+    // =================================================
+
+    if (
+        Date.now() <
+        platformMessageUntil
+    ) {
+
+        ctx.fillStyle =
+            "rgba(0,0,0,0.8)";
+
+        ctx.fillRect(
+            250,
+            255,
+            300,
+            60
+        );
+
+        ctx.fillStyle =
+            "#ffffff";
+
+        ctx.font =
+            "bold 22px Arial";
+
+        ctx.textAlign =
+            "center";
+
+        ctx.fillText(
+            "NEW PLATFORM LAYOUT!",
+            canvas.width / 2,
+            292
+        );
+
+        ctx.textAlign =
+            "left";
+    }
+
+    // =================================================
+    // DEATH
     // =================================================
 
     if (
@@ -1342,7 +2770,7 @@ function draw() {
     ) {
 
         ctx.fillStyle =
-            "rgba(0,0,0,0.70)";
+            "rgba(0,0,0,0.72)";
 
         ctx.fillRect(
             0,
@@ -1363,24 +2791,60 @@ function draw() {
         ctx.fillText(
             "YOU DIED",
             canvas.width / 2,
-            canvas.height / 2 - 45
+            canvas.height / 2 - 70
         );
 
-        respawnButton = {
+        ctx.fillStyle =
+            "#ffffff";
 
+        ctx.font =
+            "18px Arial";
+
+        ctx.fillText(
+            "You lost all powerups.",
+            canvas.width / 2,
+            canvas.height / 2 - 35
+        );
+
+        const allowedAt =
+            me.respawnAllowedAt || 0;
+
+        const remainingMs =
+            Math.max(
+                0,
+                allowedAt -
+                    Date.now()
+            );
+
+        const remainingSeconds =
+            Math.ceil(
+                remainingMs /
+                1000
+            );
+
+        respawnButton = {
             x:
                 canvas.width / 2 -
-                100,
+                105,
 
             y:
-                canvas.height / 2,
+                canvas.height / 2 +
+                5,
 
-            width: 200,
-            height: 55
+            width:
+                210,
+
+            height:
+                58,
+
+            enabled:
+                remainingMs <= 0
         };
 
         ctx.fillStyle =
-            "#32d74b";
+            respawnButton.enabled
+                ? "#32d74b"
+                : "#666666";
 
         ctx.fillRect(
             respawnButton.x,
@@ -1390,15 +2854,43 @@ function draw() {
         );
 
         ctx.fillStyle =
-            "#000000";
+            respawnButton.enabled
+                ? "#000000"
+                : "#dddddd";
 
         ctx.font =
             "bold 20px Arial";
 
+        if (
+            respawnButton.enabled
+        ) {
+
+            ctx.fillText(
+                "RESPAWN",
+                canvas.width / 2,
+                respawnButton.y + 36
+            );
+
+        } else {
+
+            ctx.fillText(
+                "RESPAWN IN " +
+                    remainingSeconds,
+                canvas.width / 2,
+                respawnButton.y + 36
+            );
+        }
+
+        ctx.font =
+            "14px Arial";
+
+        ctx.fillStyle =
+            "#ffffff";
+
         ctx.fillText(
-            "RESPAWN",
+            "Your dropped powerup stays on the map.",
             canvas.width / 2,
-            respawnButton.y + 35
+            respawnButton.y + 90
         );
 
         ctx.textAlign =
@@ -1406,12 +2898,13 @@ function draw() {
 
     } else {
 
-        respawnButton = null;
+        respawnButton =
+            null;
     }
 }
 
 // =====================================================
-// RESPAWN CLICK
+// RESPAWN BUTTON
 // =====================================================
 
 canvas.addEventListener(
@@ -1424,7 +2917,8 @@ canvas.addEventListener(
         if (
             !me ||
             !me.dead ||
-            !respawnButton
+            !respawnButton ||
+            !respawnButton.enabled
         ) {
             return;
         }
@@ -1457,14 +2951,11 @@ canvas.addEventListener(
         if (
             mouseX >=
                 respawnButton.x &&
-
             mouseX <=
                 respawnButton.x +
                 respawnButton.width &&
-
             mouseY >=
                 respawnButton.y &&
-
             mouseY <=
                 respawnButton.y +
                 respawnButton.height
@@ -1486,6 +2977,8 @@ function gameLoop() {
     updatePlayer();
 
     updateFireballs();
+
+    updatePowerupPickup();
 
     draw();
 
