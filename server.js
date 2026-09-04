@@ -9,10 +9,7 @@ const io = new Server(server);
 
 app.use(
     express.static(
-        path.join(
-            __dirname,
-            "public"
-        )
+        path.join(__dirname, "public")
     )
 );
 
@@ -36,8 +33,9 @@ const LARGE_MAP_PLAYER_COUNT = 6;
 const PLATFORM_CHANGE_TIME =
     10 * 60 * 1000;
 
+// Gold platform now requires 15 TOTAL seconds.
 const GOLD_PLATFORM_TIME =
-    30 * 1000;
+    15 * 1000;
 
 const POWERUP_TYPES = [
     "health",
@@ -66,21 +64,12 @@ let platforms = [];
 // GOLD PLATFORM STATE
 // =====================================================
 
-// Which player is CURRENTLY alone
-// on the gold platform.
 let goldControllerId = null;
 
-// When the current uninterrupted
-// period on the platform started.
 let goldControlStartedAt = 0;
 
-// NEW:
-// Saved accumulated gold-platform
-// time for every player.
-//
-// Example:
-// player spends 21 seconds on platform,
-// leaves, and this stores 21000.
+// Saves each player's accumulated
+// gold-platform time.
 let goldSavedProgress = {};
 
 // =====================================================
@@ -110,10 +99,7 @@ function randomBetween(
     return (
         min +
         Math.random() *
-        (
-            max -
-            min
-        )
+        (max - min)
     );
 }
 
@@ -143,7 +129,7 @@ function randomPowerupType() {
 }
 
 // =====================================================
-// GOLD PROGRESS HELPERS
+// GOLD PROGRESS
 // =====================================================
 
 function getSavedGoldTime(
@@ -151,9 +137,8 @@ function getSavedGoldTime(
 ) {
 
     return (
-        goldSavedProgress[
-            playerId
-        ] || 0
+        goldSavedProgress[playerId] ||
+        0
     );
 }
 
@@ -162,9 +147,7 @@ function setSavedGoldTime(
     milliseconds
 ) {
 
-    goldSavedProgress[
-        playerId
-    ] =
+    goldSavedProgress[playerId] =
         clamp(
             milliseconds,
             0,
@@ -172,9 +155,6 @@ function setSavedGoldTime(
         );
 }
 
-// Save the time that the current
-// controller has earned during this
-// visit to the platform.
 function saveCurrentGoldProgress() {
 
     if (
@@ -195,16 +175,10 @@ function saveCurrentGoldProgress() {
 
     setSavedGoldTime(
         goldControllerId,
-        previousSaved +
-        elapsed
+        previousSaved + elapsed
     );
 }
 
-// Pause the gold-platform timer.
-//
-// IMPORTANT:
-// This NO LONGER deletes the player's
-// progress. It saves it.
 function pauseGoldControl() {
 
     if (
@@ -222,13 +196,11 @@ function pauseGoldControl() {
         {
             controllerId: null,
             progress: 0,
-            remaining: 30
+            remaining: 15
         }
     );
 }
 
-// Used when the map changes.
-// Saved player progress remains.
 function clearActiveGoldControl() {
 
     if (
@@ -246,7 +218,7 @@ function clearActiveGoldControl() {
         {
             controllerId: null,
             progress: 0,
-            remaining: 30
+            remaining: 15
         }
     );
 }
@@ -261,10 +233,7 @@ function generatePlatforms() {
 
     let platformId = 0;
 
-    // =================================================
     // GROUND
-    // =================================================
-
     newPlatforms.push(
         {
             id:
@@ -274,8 +243,7 @@ function generatePlatforms() {
             x: 0,
 
             y:
-                mapHeight -
-                30,
+                mapHeight - 30,
 
             width:
                 mapWidth,
@@ -318,14 +286,11 @@ function generatePlatforms() {
 
                 style =
                     Math.floor(
-                        Math.random() *
-                        3
+                        Math.random() * 3
                     );
 
             } while (
-                style ===
-                    previousStyle &&
-                rows.length > 1
+                style === previousStyle
             );
 
             previousStyle =
@@ -345,7 +310,6 @@ function generatePlatforms() {
                 y: y,
 
                 width: 145,
-
                 height: 20,
 
                 isGold: false
@@ -365,7 +329,6 @@ function generatePlatforms() {
                 y: y,
 
                 width: 145,
-
                 height: 20,
 
                 isGold: false
@@ -385,14 +348,10 @@ function generatePlatforms() {
                 y: y,
 
                 width: 145,
-
                 height: 20,
 
                 isGold: false
             };
-
-            // Style 0:
-            // Left + Right
 
             if (
                 style === 0
@@ -404,9 +363,6 @@ function generatePlatforms() {
                 );
             }
 
-            // Style 1:
-            // Left + Center
-
             if (
                 style === 1
             ) {
@@ -416,9 +372,6 @@ function generatePlatforms() {
                     centerPlatform
                 );
             }
-
-            // Style 2:
-            // Center + Right
 
             if (
                 style === 2
@@ -446,7 +399,6 @@ function generatePlatforms() {
                 y: 25,
 
                 width: 180,
-
                 height: 20,
 
                 isGold: false
@@ -494,7 +446,6 @@ function generatePlatforms() {
                     y: y,
 
                     width: 180,
-
                     height: 20,
 
                     isGold: false
@@ -516,7 +467,6 @@ function generatePlatforms() {
                     y: y,
 
                     width: 180,
-
                     height: 20,
 
                     isGold: false
@@ -538,7 +488,6 @@ function generatePlatforms() {
                     y: y,
 
                     width: 180,
-
                     height: 20,
 
                     isGold: false
@@ -561,7 +510,6 @@ function generatePlatforms() {
                 y: 45,
 
                 width: 260,
-
                 height: 20,
 
                 isGold: false
@@ -569,11 +517,8 @@ function generatePlatforms() {
         );
     }
 
-    // =================================================
-    // CHOOSE ONE RANDOM GOLD PLATFORM
-    // =================================================
-
-    // Never make the ground gold.
+    // EXACTLY ONE RANDOM GOLD PLATFORM
+    // Ground cannot be gold.
     if (
         newPlatforms.length > 1
     ) {
@@ -594,9 +539,6 @@ function generatePlatforms() {
             true;
     }
 
-    // Changing maps/platform layouts
-    // pauses the current attempt,
-    // but DOES NOT erase saved progress.
     clearActiveGoldControl();
 
     return newPlatforms;
@@ -671,14 +613,12 @@ function createPlayer(
                 60,
                 Math.max(
                     61,
-                    mapWidth -
-                    90
+                    mapWidth - 90
                 )
             ),
 
         y:
-            mapHeight -
-            100,
+            mapHeight - 100,
 
         color:
             `hsl(${
@@ -707,7 +647,7 @@ function createPlayer(
 }
 
 // =====================================================
-// POWERUP CREATION
+// POWERUP POSITION
 // =====================================================
 
 function getRandomPowerupPosition() {
@@ -716,8 +656,7 @@ function getRandomPowerupPosition() {
         platforms.filter(
             platform =>
                 platform.y <
-                mapHeight -
-                40
+                mapHeight - 40
         );
 
     const platform =
@@ -735,18 +674,20 @@ function getRandomPowerupPosition() {
                 randomBetween(
                     platform.x + 20,
                     platform.x +
-                    platform.width -
-                    20
+                    platform.width - 20
                 ),
                 20,
                 mapWidth - 20
             ),
 
         y:
-            platform.y -
-            18
+            platform.y - 18
     };
 }
+
+// =====================================================
+// SPAWN POWERUP
+// =====================================================
 
 function spawnPowerup(
     type
@@ -785,7 +726,7 @@ function spawnPowerup(
 }
 
 // =====================================================
-// GIVE POWERUP DIRECTLY
+// GIVE POWERUP
 // =====================================================
 
 function givePowerupToPlayer(
@@ -803,16 +744,47 @@ function givePowerupToPlayer(
         return;
     }
 
+    // =================================================
+    // HEALTH POWERUP
+    //
+    // Adds 2 maximum hearts.
+    // Also gives 2 hearts of CURRENT health.
+    //
+    // DOES NOT heal to full.
+    // =================================================
+
     if (
         type === "health"
     ) {
+
+        const oldMaxHealth =
+            player.maxHealth;
 
         player.maxHealth =
             Math.min(
                 ABSOLUTE_MAX_HEALTH,
                 player.maxHealth + 4
             );
+
+        const maxHealthActuallyAdded =
+            player.maxHealth -
+            oldMaxHealth;
+
+        // Give up to 2 hearts of health,
+        // but never exceed maximum health.
+        player.health =
+            Math.min(
+                player.maxHealth,
+                player.health +
+                maxHealthActuallyAdded
+            );
     }
+
+    // =================================================
+    // DASH
+    //
+    // NO HEALTH RESTORED.
+    // =================================================
 
     if (
         type === "dash"
@@ -825,6 +797,12 @@ function givePowerupToPlayer(
             ) + 1;
     }
 
+    // =================================================
+    // GREEN FIREBALL
+    //
+    // NO HEALTH RESTORED.
+    // =================================================
+
     if (
         type ===
         "greenFireball"
@@ -836,10 +814,6 @@ function givePowerupToPlayer(
                 0
             ) + 1;
     }
-
-    // Every powerup heals to full.
-    player.health =
-        player.maxHealth;
 
     io.emit(
         "playerPowerupChanged",
@@ -915,19 +889,17 @@ function getSafePlayerPosition() {
                 60,
                 Math.max(
                     61,
-                    mapWidth -
-                    90
+                    mapWidth - 90
                 )
             ),
 
         y:
-            mapHeight -
-            100
+            mapHeight - 100
     };
 }
 
 // =====================================================
-// MAP SIZE CHANGE
+// MAP SIZE
 // =====================================================
 
 function updateMapSize() {
@@ -954,8 +926,6 @@ function updateMapSize() {
         return;
     }
 
-    // Save any active gold progress
-    // before changing the map.
     clearActiveGoldControl();
 
     mapWidth =
@@ -1047,8 +1017,6 @@ function killPlayer(
         return;
     }
 
-    // If this person was on the gold
-    // platform, save their accumulated time.
     if (
         goldControllerId ===
         playerId
@@ -1058,30 +1026,26 @@ function killPlayer(
     }
 
     player.health = 0;
+
     player.dead = true;
 
     player.respawnAllowedAt =
         Date.now() +
         5000;
 
-    // Drop exactly one random powerup.
+    // Death drops exactly one random
+    // Health / Dash / Green powerup.
     spawnPowerup(
         randomPowerupType()
     );
 
-    // Death removes all actual upgrades.
+    // Lose upgrades after death.
     player.maxHealth =
         BASE_MAX_HEALTH;
 
     player.dashLevel = 0;
-    player.greenLevel = 0;
 
-    // IMPORTANT:
-    // We DO NOT erase goldSavedProgress here.
-    //
-    // So if the player had 21 seconds,
-    // died, respawned and later returned,
-    // they still have their 21 seconds.
+    player.greenLevel = 0;
 
     io.emit(
         "playerPowerupChanged",
@@ -1207,12 +1171,8 @@ setInterval(
             }
         }
 
-        // =================================================
-        // NOBODY OR MULTIPLE PLAYERS
-        // =================================================
-
-        // Nobody earns time.
-        // Existing saved time stays.
+        // Nobody or more than one player:
+        // pause progress but SAVE it.
         if (
             standingPlayers.length !== 1
         ) {
@@ -1227,22 +1187,14 @@ setInterval(
             return;
         }
 
-        // =================================================
-        // EXACTLY ONE PLAYER
-        // =================================================
-
         const solePlayerId =
             standingPlayers[0];
 
-        // A new player has become
-        // the sole controller.
         if (
             goldControllerId !==
             solePlayerId
         ) {
 
-            // Save previous player's progress
-            // before switching.
             if (
                 goldControllerId
             ) {
@@ -1304,7 +1256,7 @@ setInterval(
         );
 
         // =================================================
-        // PLAYER REACHED 30 TOTAL SECONDS
+        // 15 TOTAL SECONDS = RANDOM POWERUP
         // =================================================
 
         if (
@@ -1312,6 +1264,10 @@ setInterval(
             GOLD_PLATFORM_TIME
         ) {
 
+            // Can STILL be:
+            // Health
+            // Dash
+            // Green Fireball
             const rewardType =
                 randomPowerupType();
 
@@ -1331,16 +1287,14 @@ setInterval(
                 }
             );
 
-            // The reward has been earned,
-            // so this player's saved progress
-            // starts back at zero.
+            // Reward earned:
+            // reset saved platform time.
             goldSavedProgress[
                 solePlayerId
             ] = 0;
 
-            // If they remain alone on the
-            // platform, a fresh 30-second
-            // reward timer starts immediately.
+            // Player can remain on platform
+            // and begin another 15 seconds.
             goldControlStartedAt =
                 Date.now();
 
@@ -1352,7 +1306,7 @@ setInterval(
 
                     progress: 0,
 
-                    remaining: 30
+                    remaining: 15
                 }
             );
         }
@@ -1362,14 +1316,12 @@ setInterval(
 );
 
 // =====================================================
-// RANDOM PLATFORM CHANGE
+// PLATFORM RANDOMIZATION
 // =====================================================
 
 setInterval(
     () => {
 
-        // Save gold progress before
-        // generating a new gold platform.
         clearActiveGoldControl();
 
         platforms =
@@ -1409,8 +1361,6 @@ io.on(
                 socket.id
             );
 
-        // Initialize saved gold time
-        // for this connection.
         if (
             goldSavedProgress[
                 socket.id
@@ -1422,8 +1372,6 @@ io.on(
             ] = 0;
         }
 
-        // If player #6 joins,
-        // expand immediately.
         updateMapSize();
 
         socket.emit(
@@ -1459,7 +1407,7 @@ io.on(
         );
 
         // =================================================
-        // PLAYER MOVE
+        // PLAYER MOVEMENT
         // =================================================
 
         socket.on(
@@ -1478,16 +1426,14 @@ io.on(
 
                 player.x =
                     clamp(
-                        Number(data.x) ||
-                        0,
+                        Number(data.x) || 0,
                         0,
                         mapWidth -
                         PLAYER_SIZE
                     );
 
                 player.y =
-                    Number(data.y) ||
-                    0;
+                    Number(data.y) || 0;
 
                 player.facing =
                     data.facing === -1
@@ -1514,7 +1460,7 @@ io.on(
         );
 
         // =================================================
-        // SHOVE / KNOCKBACK
+        // KNOCKBACK
         // =================================================
 
         socket.on(
@@ -1619,8 +1565,6 @@ io.on(
                     return;
                 }
 
-                // Normal fireball:
-                // 1 full heart.
                 damagePlayer(
                     data.targetId,
                     2
@@ -1676,8 +1620,6 @@ io.on(
                     return;
                 }
 
-                // Green fireball:
-                // half a heart.
                 damagePlayer(
                     data.targetId,
                     1
@@ -1694,8 +1636,7 @@ io.on(
                     "receiveKnockback",
                     {
                         velocityX:
-                            direction *
-                            60,
+                            direction * 60,
 
                         velocityY:
                             -20
@@ -1758,8 +1699,6 @@ io.on(
                     return;
                 }
 
-                // Sword:
-                // half a heart.
                 damagePlayer(
                     data.targetId,
                     1
@@ -1783,7 +1722,7 @@ io.on(
         );
 
         // =================================================
-        // PICK UP POWERUP
+        // PICKUP POWERUP
         // =================================================
 
         socket.on(
@@ -1828,14 +1767,13 @@ io.on(
                         dy * dy
                     );
 
-                // Small server-side
-                // pickup validation.
                 if (
                     distance > 60
                 ) {
                     return;
                 }
 
+                // NO automatic full heal.
                 givePowerupToPlayer(
                     socket.id,
                     powerup.type
@@ -1899,6 +1837,7 @@ io.on(
                     0;
 
                 player.dashLevel = 0;
+
                 player.greenLevel = 0;
 
                 player.facing = 1;
@@ -1947,8 +1886,6 @@ io.on(
                     socket.id
                 );
 
-                // Save their current gold
-                // progress before removing them.
                 if (
                     goldControllerId ===
                     socket.id
@@ -1961,10 +1898,6 @@ io.on(
                     socket.id
                 ];
 
-                // Since Socket.IO gives this
-                // player a new ID next time they
-                // connect, there is no reason to
-                // permanently keep old progress.
                 delete goldSavedProgress[
                     socket.id
                 ];
@@ -1974,8 +1907,6 @@ io.on(
                     socket.id
                 );
 
-                // If we fall from 6 players
-                // to 5, shrink immediately.
                 updateMapSize();
             }
         );
