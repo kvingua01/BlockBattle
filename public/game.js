@@ -120,7 +120,7 @@ function getDashCooldown(player) {
 
     if (
         !player ||
-        player.dashLevel <= 0
+        (player.dashLevel || 0) <= 0
     ) {
         return 0;
     }
@@ -139,7 +139,7 @@ function getDashPower(player) {
 
     if (
         !player ||
-        player.dashLevel <= 0
+        (player.dashLevel || 0) <= 0
     ) {
         return 0;
     }
@@ -170,7 +170,7 @@ function getDashDistancePercent(player) {
 
     if (
         !player ||
-        player.dashLevel <= 0
+        (player.dashLevel || 0) <= 0
     ) {
         return 0;
     }
@@ -198,7 +198,7 @@ function getGreenCooldown(player) {
 
     if (
         !player ||
-        player.greenLevel <= 0
+        (player.greenLevel || 0) <= 0
     ) {
         return 0;
     }
@@ -458,7 +458,34 @@ socket.on(
     (serverPlayers) => {
 
         players =
-            serverPlayers;
+            serverPlayers || {};
+
+        for (
+            const id in players
+        ) {
+
+            players[id].dashLevel =
+                players[id].dashLevel || 0;
+
+            players[id].greenLevel =
+                players[id].greenLevel || 0;
+
+            players[id].maxHealth =
+                players[id].maxHealth ||
+                BASE_MAX_HEALTH;
+
+            if (
+                players[id].health ===
+                undefined
+            ) {
+
+                players[id].health =
+                    players[id].maxHealth;
+            }
+
+            players[id].facing =
+                players[id].facing || 1;
+        }
 
         const me =
             players[myId];
@@ -474,6 +501,19 @@ socket.on(
 socket.on(
     "newPlayer",
     (player) => {
+
+        player.dashLevel =
+            player.dashLevel || 0;
+
+        player.greenLevel =
+            player.greenLevel || 0;
+
+        player.maxHealth =
+            player.maxHealth ||
+            BASE_MAX_HEALTH;
+
+        player.facing =
+            player.facing || 1;
 
         players[player.id] =
             player;
@@ -572,21 +612,33 @@ socket.on(
             return;
         }
 
-        player.health =
-            data.health;
+        if (
+            data.health !== undefined
+        ) {
+            player.health =
+                data.health;
+        }
 
-        player.maxHealth =
-            data.maxHealth;
+        if (
+            data.maxHealth !== undefined
+        ) {
+            player.maxHealth =
+                data.maxHealth;
+        }
 
         player.dashLevel =
-            data.dashLevel;
+            data.dashLevel ??
+            player.dashLevel ??
+            0;
 
         player.greenLevel =
-            data.greenLevel;
+            data.greenLevel ??
+            player.greenLevel ??
+            0;
 
         if (
             data.id === myId &&
-            data.dashLevel === 0
+            player.dashLevel === 0
         ) {
 
             lastDashTime = 0;
@@ -594,7 +646,7 @@ socket.on(
 
         if (
             data.id === myId &&
-            data.greenLevel === 0
+            player.greenLevel === 0
         ) {
 
             lastGreenFireballTime = 0;
@@ -860,7 +912,7 @@ function performDash() {
     if (
         !me ||
         me.dead ||
-        me.dashLevel <= 0
+        (me.dashLevel || 0) <= 0
     ) {
         return;
     }
@@ -876,17 +928,36 @@ function performDash() {
         return;
     }
 
-    lastDashTime =
-        Date.now();
-
     const dashPower =
         getDashPower(me);
 
+    // =================================================
+    // CHOOSE DASH DIRECTION BEFORE USING COOLDOWN
+    // =================================================
+
+    const holdingLeft =
+        leftHeld();
+
+    const holdingRight =
+        rightHeld();
+
+    const holdingJump =
+        jumpHeld();
+
+    // =================================================
+    // UPWARD DASH
+    //
+    // ONLY happens if W/UP is held WITHOUT A/D.
+    // =================================================
+
     if (
-        jumpHeld() &&
-        !leftHeld() &&
-        !rightHeld()
+        holdingJump &&
+        !holdingLeft &&
+        !holdingRight
     ) {
+
+        lastDashTime =
+            Date.now();
 
         velocityX = 0;
 
@@ -898,28 +969,74 @@ function performDash() {
         return;
     }
 
+    // =================================================
+    // SIDEWAYS DASH
+    //
+    // A + G = left
+    // D + G = right
+    // W + A + G = left
+    // W + D + G = right
+    //
+    // We move the player immediately instead of setting
+    // velocityX because normal A/D movement would replace
+    // the dash velocity on the next animation frame.
+    // =================================================
+
     let direction =
         facing;
 
     if (
-        leftHeld() &&
-        !rightHeld()
+        holdingLeft &&
+        !holdingRight
     ) {
+
         direction = -1;
     }
 
     if (
-        rightHeld() &&
-        !leftHeld()
+        holdingRight &&
+        !holdingLeft
     ) {
+
         direction = 1;
     }
+
+    lastDashTime =
+        Date.now();
 
     facing =
         direction;
 
-    velocityX =
-        direction * dashPower;
+    me.facing =
+        direction;
+
+    me.x +=
+        direction *
+        dashPower;
+
+    me.x =
+        Math.max(
+            0,
+            Math.min(
+                canvas.width -
+                PLAYER_SIZE,
+                me.x
+            )
+        );
+
+    socket.emit(
+        "playerMove",
+        {
+            x:
+                me.x,
+
+            y:
+                me.y,
+
+            facing:
+                facing
+        }
+    );
 }
 
 // =====================================================
@@ -939,7 +1056,7 @@ function performFAction() {
     }
 
     if (
-        me.greenLevel > 0
+        (me.greenLevel || 0) > 0
     ) {
 
         shootGreenFireball();
@@ -1049,7 +1166,7 @@ function performMeleeAttack() {
     if (
         !me ||
         me.dead ||
-        me.greenLevel > 0
+        (me.greenLevel || 0) > 0
     ) {
         return;
     }
@@ -1221,7 +1338,7 @@ function shootGreenFireball() {
     if (
         !me ||
         me.dead ||
-        me.greenLevel <= 0
+        (me.greenLevel || 0) <= 0
     ) {
         return;
     }
@@ -2107,7 +2224,7 @@ function drawPowerup(powerup) {
 
 // =====================================================
 // FIREBALL CHARGE METER
-// NOW ON TOP
+// TOP CENTER
 // =====================================================
 
 function drawFireballChargeMeter() {
@@ -2140,7 +2257,6 @@ function drawFireballChargeMeter() {
         canvas.width / 2 -
         width / 2;
 
-    // SWAPPED: FIREBALL IS NOW TOP
     const y = 45;
 
     ctx.fillStyle =
@@ -2231,7 +2347,7 @@ function drawFireballChargeMeter() {
 
 // =====================================================
 // GOLD PLATFORM METER
-// NOW UNDER FIREBALL
+// BELOW FIREBALL
 // =====================================================
 
 function drawGoldStatus() {
@@ -2248,7 +2364,6 @@ function drawGoldStatus() {
         canvas.width / 2 -
         width / 2;
 
-    // SWAPPED: GOLD IS NOW BELOW FIREBALL
     const y = 115;
 
     ctx.fillStyle =
@@ -2401,12 +2516,11 @@ function drawPowerupHud(me) {
         hudY + 45
     );
 
-    // DASH COOLDOWN + DISTANCE
     ctx.fillStyle =
         "#4fd5ff";
 
     if (
-        me.dashLevel > 0
+        (me.dashLevel || 0) > 0
     ) {
 
         const cooldown =
@@ -2467,12 +2581,11 @@ function drawPowerupHud(me) {
         );
     }
 
-    // GREEN FIREBALL COOLDOWN
     ctx.fillStyle =
         "#32ff5a";
 
     if (
-        me.greenLevel > 0
+        (me.greenLevel || 0) > 0
     ) {
 
         const cooldown =
@@ -2693,7 +2806,7 @@ function draw() {
 
         if (
             meleeSwings[id] &&
-            !player.greenLevel
+            !(player.greenLevel || 0)
         ) {
 
             const elapsed =
@@ -2823,18 +2936,12 @@ function draw() {
         );
     }
 
-    // POWERUP HUD + COOLDOWNS
     drawPowerupHud(me);
 
-    // =================================================
-    // CENTER METERS
-    //
-    // FIREBALL = TOP
-    // GOLD = BELOW
-    // =================================================
-
+    // FIREBALL ON TOP
     drawFireballChargeMeter();
 
+    // GOLD UNDER FIREBALL
     drawGoldStatus();
 
     // GOLD REWARD MESSAGE
