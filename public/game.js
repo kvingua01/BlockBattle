@@ -13,63 +13,44 @@ const ctx =
 const PLAYER_SIZE = 30;
 
 const MOVE_SPEED = 4;
-
 const JUMP_POWER = 11;
-
 const GRAVITY = 0.5;
 
 const NORMAL_SHOVE_RANGE = 85;
-
 const NORMAL_KNOCKBACK = 6;
 
 const FIREBALL_SPEED = 9;
-
 const FIREBALL_KNOCKBACK = 30;
-
 const FIREBALL_CHARGE_TIME = 1000;
 
 const MELEE_RANGE = 65;
-
 const MELEE_KNOCKBACK = 4;
-
 const MELEE_COOLDOWN = 350;
 
 const SWORD_SWING_TIME = 220;
 
 const MAX_HEALTH = 20;
 
-// 20 points = 10 hearts
-// 2 points = full heart
-// 1 point = half heart
-
 // =====================================================
 // GAME DATA
 // =====================================================
 
 let myId = null;
-
 let players = {};
-
 let fireballs = [];
-
 let meleeSwings = {};
-
 let keys = {};
 
 let velocityX = 0;
-
 let velocityY = 0;
 
 let onGround = false;
-
 let facing = 1;
 
 let spaceHeld = false;
-
 let spacePressedAt = 0;
 
 let lastMeleeTime = 0;
-
 let respawnButton = null;
 
 // =====================================================
@@ -77,427 +58,200 @@ let respawnButton = null;
 // =====================================================
 
 const platforms = [
-
-    {
-        x: 0,
-        y: 570,
-        width: 800,
-        height: 30
-    },
-
-    {
-        x: 80,
-        y: 490,
-        width: 180,
-        height: 20
-    },
-
-    {
-        x: 350,
-        y: 420,
-        width: 180,
-        height: 20
-    },
-
-    {
-        x: 100,
-        y: 340,
-        width: 170,
-        height: 20
-    },
-
-    {
-        x: 430,
-        y: 270,
-        width: 170,
-        height: 20
-    },
-
-    {
-        x: 180,
-        y: 190,
-        width: 170,
-        height: 20
-    },
-
-    {
-        x: 450,
-        y: 110,
-        width: 170,
-        height: 20
-    },
-
-    {
-        x: 280,
-        y: 40,
-        width: 220,
-        height: 20
-    }
+    { x: 0, y: 570, width: 800, height: 30 },
+    { x: 80, y: 490, width: 180, height: 20 },
+    { x: 350, y: 420, width: 180, height: 20 },
+    { x: 100, y: 340, width: 170, height: 20 },
+    { x: 430, y: 270, width: 170, height: 20 },
+    { x: 180, y: 190, width: 170, height: 20 },
+    { x: 450, y: 110, width: 170, height: 20 },
+    { x: 280, y: 40, width: 220, height: 20 }
 ];
 
 // =====================================================
-// HELPER FUNCTIONS
+// CONTROL HELPERS
 // =====================================================
 
 function leftHeld() {
-
-    return (
-        keys["a"] ||
-        keys["arrowleft"]
-    );
+    return keys["KeyA"] || keys["ArrowLeft"];
 }
 
 function rightHeld() {
-
-    return (
-        keys["d"] ||
-        keys["arrowright"]
-    );
+    return keys["KeyD"] || keys["ArrowRight"];
 }
 
 function jumpHeld() {
-
-    return (
-        keys["w"] ||
-        keys["arrowup"]
-    );
+    return keys["KeyW"] || keys["ArrowUp"];
 }
 
 // =====================================================
-// SOCKET CONNECTION
+// SOCKET EVENTS
 // =====================================================
 
 socket.on("connect", () => {
-
     myId = socket.id;
 });
 
-// =====================================================
-// PLAYER EVENTS
-// =====================================================
+socket.on("currentPlayers", (serverPlayers) => {
+    players = serverPlayers;
 
-socket.on(
-    "currentPlayers",
-    (serverPlayers) => {
+    const me = players[myId];
 
-        players =
-            serverPlayers;
-
-        const me =
-            players[myId];
-
-        if (me) {
-
-            facing =
-                me.facing || 1;
-        }
+    if (me) {
+        facing = me.facing || 1;
     }
-);
+});
 
-socket.on(
-    "newPlayer",
-    (player) => {
+socket.on("newPlayer", (player) => {
+    players[player.id] = player;
+});
 
-        players[player.id] =
-            player;
+socket.on("playerMoved", (data) => {
+    if (!players[data.id]) return;
+
+    players[data.id].x = data.x;
+    players[data.id].y = data.y;
+    players[data.id].facing = data.facing || 1;
+});
+
+socket.on("playerDisconnected", (id) => {
+    delete players[id];
+    delete meleeSwings[id];
+});
+
+socket.on("playerHealthChanged", (data) => {
+    if (!players[data.id]) return;
+
+    players[data.id].health = data.health;
+    players[data.id].dead = data.dead;
+
+    if (data.id === myId && data.dead) {
+        velocityX = 0;
+        velocityY = 0;
     }
-);
+});
 
-socket.on(
-    "playerMoved",
-    (data) => {
-
-        if (!players[data.id]) {
-            return;
-        }
-
-        players[data.id].x =
-            data.x;
-
-        players[data.id].y =
-            data.y;
-
-        players[data.id].facing =
-            data.facing || 1;
+socket.on("playerRespawned", (data) => {
+    if (!players[data.id]) {
+        players[data.id] = {};
     }
-);
 
-socket.on(
-    "playerDisconnected",
-    (id) => {
+    players[data.id].x = data.x;
+    players[data.id].y = data.y;
+    players[data.id].health = data.health;
+    players[data.id].dead = false;
+    players[data.id].facing = data.facing || 1;
 
-        delete players[id];
-
-        delete meleeSwings[id];
+    if (data.id === myId) {
+        velocityX = 0;
+        velocityY = 0;
+        facing = data.facing || 1;
     }
-);
+});
 
-// =====================================================
-// HEALTH EVENTS
-// =====================================================
+socket.on("receiveKnockback", (data) => {
+    const me = players[myId];
 
-socket.on(
-    "playerHealthChanged",
-    (data) => {
+    if (!me || me.dead) return;
 
-        if (!players[data.id]) {
-            return;
-        }
+    velocityX += data.velocityX;
+    velocityY += data.velocityY;
+});
 
-        players[data.id].health =
-            data.health;
+socket.on("playerMeleeSwing", (data) => {
+    meleeSwings[data.id] = {
+        start: Date.now(),
+        facing: data.facing
+    };
+});
 
-        players[data.id].dead =
-            data.dead;
+socket.on("spawnFireball", (fireball) => {
+    fireballs.push(fireball);
+});
 
-        if (
-            data.id === myId &&
-            data.dead
-        ) {
-
-            velocityX = 0;
-
-            velocityY = 0;
-        }
-    }
-);
-
-// =====================================================
-// RESPAWN EVENT
-// =====================================================
-
-socket.on(
-    "playerRespawned",
-    (data) => {
-
-        if (!players[data.id]) {
-
-            players[data.id] = {};
-        }
-
-        players[data.id].x =
-            data.x;
-
-        players[data.id].y =
-            data.y;
-
-        players[data.id].health =
-            data.health;
-
-        players[data.id].dead =
-            false;
-
-        players[data.id].facing =
-            data.facing || 1;
-
-        if (
-            data.id === myId
-        ) {
-
-            velocityX = 0;
-
-            velocityY = 0;
-
-            facing =
-                data.facing || 1;
-        }
-    }
-);
-
-// =====================================================
-// KNOCKBACK
-// =====================================================
-
-socket.on(
-    "receiveKnockback",
-    (data) => {
-
-        const me =
-            players[myId];
-
-        if (
-            !me ||
-            me.dead
-        ) {
-            return;
-        }
-
-        velocityX +=
-            data.velocityX;
-
-        velocityY +=
-            data.velocityY;
-    }
-);
-
-// =====================================================
-// SWORD VISUAL EVENT
-// =====================================================
-
-socket.on(
-    "playerMeleeSwing",
-    (data) => {
-
-        meleeSwings[data.id] = {
-
-            start:
-                Date.now(),
-
-            facing:
-                data.facing
-        };
-    }
-);
-
-// =====================================================
-// FIREBALL EVENTS
-// =====================================================
-
-socket.on(
-    "spawnFireball",
-    (fireball) => {
-
-        fireballs.push(
-            fireball
-        );
-    }
-);
-
-socket.on(
-    "removeFireball",
-    (data) => {
-
-        fireballs =
-            fireballs.filter(
-                fireball =>
-                    fireball.id !==
-                    data.id
-            );
-    }
-);
+socket.on("removeFireball", (data) => {
+    fireballs = fireballs.filter(
+        fireball => fireball.id !== data.id
+    );
+});
 
 // =====================================================
 // KEYBOARD
 // =====================================================
 
-document.addEventListener(
-    "keydown",
-    (event) => {
+document.addEventListener("keydown", (event) => {
 
-        const key =
-            event.key.toLowerCase();
+    // Prevent arrow keys and space from scrolling page
+    if (
+        event.code === "ArrowLeft" ||
+        event.code === "ArrowRight" ||
+        event.code === "ArrowUp" ||
+        event.code === "ArrowDown" ||
+        event.code === "Space"
+    ) {
+        event.preventDefault();
+    }
 
-        // Stop arrows / space from
-        // scrolling the webpage.
-        if (
-            event.code === "Space" ||
-            event.key === "ArrowLeft" ||
-            event.key === "ArrowRight" ||
-            event.key === "ArrowUp" ||
-            event.key === "ArrowDown"
-        ) {
+    keys[event.code] = true;
 
-            event.preventDefault();
-        }
+    const me = players[myId];
 
-        keys[key] = true;
+    if (!me || me.dead) return;
 
-        const me =
-            players[myId];
+    if (
+        event.code === "Space" &&
+        !spaceHeld
+    ) {
+        spaceHeld = true;
+        spacePressedAt = Date.now();
+    }
 
-        if (
-            !me ||
-            me.dead
-        ) {
+    if (
+        event.code === "KeyF" &&
+        !event.repeat
+    ) {
+        performMeleeAttack();
+    }
+});
+
+document.addEventListener("keyup", (event) => {
+
+    if (
+        event.code === "ArrowLeft" ||
+        event.code === "ArrowRight" ||
+        event.code === "ArrowUp" ||
+        event.code === "ArrowDown" ||
+        event.code === "Space"
+    ) {
+        event.preventDefault();
+    }
+
+    keys[event.code] = false;
+
+    if (event.code === "Space") {
+
+        const me = players[myId];
+
+        if (!me || me.dead) {
+            spaceHeld = false;
             return;
         }
 
-        // -----------------------------
-        // SPACE START
-        // -----------------------------
+        const heldTime =
+            Date.now() - spacePressedAt;
 
         if (
-            event.code === "Space" &&
-            !spaceHeld
+            heldTime >=
+            FIREBALL_CHARGE_TIME
         ) {
-
-            spaceHeld = true;
-
-            spacePressedAt =
-                Date.now();
+            shootFireball();
+        } else {
+            normalShove();
         }
 
-        // -----------------------------
-        // SWORD
-        // -----------------------------
-
-        if (
-            key === "f" &&
-            !event.repeat
-        ) {
-
-            performMeleeAttack();
-        }
+        spaceHeld = false;
     }
-);
-
-document.addEventListener(
-    "keyup",
-    (event) => {
-
-        const key =
-            event.key.toLowerCase();
-
-        if (
-            event.code === "Space" ||
-            event.key === "ArrowLeft" ||
-            event.key === "ArrowRight" ||
-            event.key === "ArrowUp" ||
-            event.key === "ArrowDown"
-        ) {
-
-            event.preventDefault();
-        }
-
-        keys[key] = false;
-
-        if (
-            event.code === "Space"
-        ) {
-
-            const me =
-                players[myId];
-
-            if (
-                !me ||
-                me.dead
-            ) {
-
-                spaceHeld = false;
-
-                return;
-            }
-
-            const heldTime =
-                Date.now() -
-                spacePressedAt;
-
-            if (
-                heldTime >=
-                FIREBALL_CHARGE_TIME
-            ) {
-
-                shootFireball();
-
-            } else {
-
-                normalShove();
-            }
-
-            spaceHeld = false;
-        }
-    }
-);
+});
 
 // =====================================================
 // NORMAL SHOVE
@@ -505,87 +259,53 @@ document.addEventListener(
 
 function normalShove() {
 
-    const me =
-        players[myId];
+    const me = players[myId];
 
-    if (
-        !me ||
-        me.dead
-    ) {
-        return;
-    }
+    if (!me || me.dead) return;
 
-    for (
-        const id
-        in players
-    ) {
+    for (const id in players) {
 
-        if (
-            id === myId
-        ) {
-            continue;
-        }
+        if (id === myId) continue;
 
-        const target =
-            players[id];
+        const target = players[id];
 
-        if (
-            !target ||
-            target.dead
-        ) {
-            continue;
-        }
+        if (!target || target.dead) continue;
 
         const myCenterX =
-            me.x +
-            PLAYER_SIZE / 2;
+            me.x + PLAYER_SIZE / 2;
 
         const myCenterY =
-            me.y +
-            PLAYER_SIZE / 2;
+            me.y + PLAYER_SIZE / 2;
 
         const targetCenterX =
-            target.x +
-            PLAYER_SIZE / 2;
+            target.x + PLAYER_SIZE / 2;
 
         const targetCenterY =
-            target.y +
-            PLAYER_SIZE / 2;
+            target.y + PLAYER_SIZE / 2;
 
         const dx =
-            targetCenterX -
-            myCenterX;
+            targetCenterX - myCenterX;
 
         const dy =
-            targetCenterY -
-            myCenterY;
+            targetCenterY - myCenterY;
 
         const distance =
-            Math.sqrt(
-                dx * dx +
-                dy * dy
-            );
+            Math.sqrt(dx * dx + dy * dy);
 
         if (
             distance <=
             NORMAL_SHOVE_RANGE
         ) {
-
             const direction =
-                dx >= 0
-                    ? 1
-                    : -1;
+                dx >= 0 ? 1 : -1;
 
             socket.emit(
                 "knockbackPlayer",
                 {
-
                     targetId: id,
-
                     velocityX:
                         direction *
                         NORMAL_KNOCKBACK,
-
                     velocityY: -4
                 }
             );
@@ -599,110 +319,65 @@ function normalShove() {
 
 function performMeleeAttack() {
 
-    const me =
-        players[myId];
+    const me = players[myId];
+
+    if (!me || me.dead) return;
+
+    const now = Date.now();
 
     if (
-        !me ||
-        me.dead
-    ) {
-        return;
-    }
-
-    const now =
-        Date.now();
-
-    if (
-        now -
-        lastMeleeTime <
+        now - lastMeleeTime <
         MELEE_COOLDOWN
     ) {
-
         return;
     }
 
-    lastMeleeTime =
-        now;
+    lastMeleeTime = now;
 
-    // Immediately display our sword.
     meleeSwings[myId] = {
-
-        start:
-            now,
-
-        facing:
-            facing
+        start: now,
+        facing: facing
     };
 
-    // Tell other computers to
-    // show our sword too.
     socket.emit(
         "meleeSwing",
         {
-            facing:
-                facing
+            facing: facing
         }
     );
 
-    let closestTarget =
-        null;
+    let closestTarget = null;
+    let closestDistance = Infinity;
 
-    let closestDistance =
-        Infinity;
+    for (const id in players) {
 
-    for (
-        const id
-        in players
-    ) {
+        if (id === myId) continue;
 
-        if (
-            id === myId
-        ) {
-            continue;
-        }
+        const target = players[id];
 
-        const target =
-            players[id];
-
-        if (
-            !target ||
-            target.dead
-        ) {
-            continue;
-        }
+        if (!target || target.dead) continue;
 
         const myCenterX =
-            me.x +
-            PLAYER_SIZE / 2;
+            me.x + PLAYER_SIZE / 2;
 
         const myCenterY =
-            me.y +
-            PLAYER_SIZE / 2;
+            me.y + PLAYER_SIZE / 2;
 
         const targetCenterX =
-            target.x +
-            PLAYER_SIZE / 2;
+            target.x + PLAYER_SIZE / 2;
 
         const targetCenterY =
-            target.y +
-            PLAYER_SIZE / 2;
+            target.y + PLAYER_SIZE / 2;
 
         const dx =
-            targetCenterX -
-            myCenterX;
+            targetCenterX - myCenterX;
 
         const dy =
-            targetCenterY -
-            myCenterY;
+            targetCenterY - myCenterY;
 
         const distance =
-            Math.sqrt(
-                dx * dx +
-                dy * dy
-            );
+            Math.sqrt(dx * dx + dy * dy);
 
-        // Sword only hits in the
-        // direction you are facing.
         const inFront =
             facing === 1
                 ? dx >= 0
@@ -710,36 +385,23 @@ function performMeleeAttack() {
 
         if (
             inFront &&
-            distance <=
-                MELEE_RANGE &&
-            distance <
-                closestDistance
+            distance <= MELEE_RANGE &&
+            distance < closestDistance
         ) {
-
-            closestDistance =
-                distance;
+            closestDistance = distance;
 
             closestTarget = {
-
-                id:
-                    id,
-
-                player:
-                    target
+                id: id,
+                player: target
             };
         }
     }
 
-    if (
-        !closestTarget
-    ) {
-        return;
-    }
+    if (!closestTarget) return;
 
     socket.emit(
         "meleeHit",
         {
-
             targetId:
                 closestTarget.id,
 
@@ -756,18 +418,11 @@ function performMeleeAttack() {
 
 function shootFireball() {
 
-    const me =
-        players[myId];
+    const me = players[myId];
 
-    if (
-        !me ||
-        me.dead
-    ) {
-        return;
-    }
+    if (!me || me.dead) return;
 
     const fireball = {
-
         id:
             myId +
             "-" +
@@ -775,8 +430,7 @@ function shootFireball() {
             "-" +
             Math.random(),
 
-        ownerId:
-            myId,
+        ownerId: myId,
 
         x:
             me.x +
@@ -790,13 +444,10 @@ function shootFireball() {
             facing *
             FIREBALL_SPEED,
 
-        radius:
-            10
+        radius: 10
     };
 
-    fireballs.push(
-        fireball
-    );
+    fireballs.push(fireball);
 
     socket.emit(
         "shootFireball",
@@ -813,30 +464,24 @@ function updateFireballs() {
     for (
         let i =
             fireballs.length - 1;
-
         i >= 0;
-
         i--
     ) {
-
         const fireball =
             fireballs[i];
 
         fireball.x +=
             fireball.velocityX;
 
-        // Remove offscreen fireballs.
         if (
             fireball.x < -100 ||
             fireball.x >
                 canvas.width + 100
         ) {
-
             if (
                 fireball.ownerId ===
                 myId
             ) {
-
                 socket.emit(
                     "removeFireball",
                     {
@@ -846,45 +491,31 @@ function updateFireballs() {
                 );
             }
 
-            fireballs.splice(
-                i,
-                1
-            );
+            fireballs.splice(i, 1);
 
             continue;
         }
 
-        // Only the shooter determines
-        // whether the fireball hit.
         if (
             fireball.ownerId !==
             myId
         ) {
-
             continue;
         }
 
-        for (
-            const id
-            in players
-        ) {
+        for (const id in players) {
 
             if (
                 id ===
                 fireball.ownerId
             ) {
-
                 continue;
             }
 
             const target =
                 players[id];
 
-            if (
-                !target ||
-                target.dead
-            ) {
-
+            if (!target || target.dead) {
                 continue;
             }
 
@@ -915,17 +546,13 @@ function updateFireballs() {
                 fireball.radius +
                     PLAYER_SIZE / 2
             ) {
-
-                // 1 heart damage
                 socket.emit(
                     "fireballHit",
                     {
-                        targetId:
-                            id
+                        targetId: id
                     }
                 );
 
-                // Big knockback
                 const direction =
                     fireball.velocityX >= 0
                         ? 1
@@ -934,16 +561,13 @@ function updateFireballs() {
                 socket.emit(
                     "knockbackPlayer",
                     {
-
-                        targetId:
-                            id,
+                        targetId: id,
 
                         velocityX:
                             direction *
                             FIREBALL_KNOCKBACK,
 
-                        velocityY:
-                            -10
+                        velocityY: -10
                     }
                 );
 
@@ -955,10 +579,7 @@ function updateFireballs() {
                     }
                 );
 
-                fireballs.splice(
-                    i,
-                    1
-                );
+                fireballs.splice(i, 1);
 
                 break;
             }
@@ -972,102 +593,60 @@ function updateFireballs() {
 
 function updatePlayer() {
 
-    const me =
-        players[myId];
+    const me = players[myId];
 
-    if (!me) {
-        return;
-    }
+    if (!me) return;
 
-    if (
-        me.dead
-    ) {
-
+    if (me.dead) {
         velocityX = 0;
-
         velocityY = 0;
-
         return;
     }
 
-    // =================================================
-    // LEFT
-    // A OR LEFT ARROW
-    // =================================================
-
+    // LEFT: A or Left Arrow
     if (
         leftHeld() &&
         !rightHeld()
     ) {
-
-        velocityX =
-            -MOVE_SPEED;
-
+        velocityX = -MOVE_SPEED;
         facing = -1;
     }
 
-    // =================================================
-    // RIGHT
-    // D OR RIGHT ARROW
-    // =================================================
-
+    // RIGHT: D or Right Arrow
     else if (
         rightHeld() &&
         !leftHeld()
     ) {
-
-        velocityX =
-            MOVE_SPEED;
-
+        velocityX = MOVE_SPEED;
         facing = 1;
     }
 
     else {
-
-        velocityX *=
-            0.8;
+        velocityX *= 0.8;
 
         if (
-            Math.abs(
-                velocityX
-            ) < 0.1
+            Math.abs(velocityX) <
+            0.1
         ) {
-
             velocityX = 0;
         }
     }
 
-    // =================================================
-    // AUTO-JUMP
-    // W OR UP ARROW
-    // =================================================
-    //
-    // Keep holding W or Up Arrow.
-    // Every time you land you
-    // automatically jump again.
-
+    // JUMP: W or Up Arrow
+    // Holding either key keeps auto-jump.
     if (
         jumpHeld() &&
         onGround
     ) {
-
         velocityY =
             -JUMP_POWER;
 
         onGround = false;
     }
 
-    // =================================================
-    // HORIZONTAL MOVEMENT
-    // =================================================
+    me.x += velocityX;
 
-    me.x +=
-        velocityX;
-
-    if (
-        me.x < 0
-    ) {
-
+    if (me.x < 0) {
         me.x = 0;
     }
 
@@ -1076,40 +655,25 @@ function updatePlayer() {
         canvas.width -
             PLAYER_SIZE
     ) {
-
         me.x =
             canvas.width -
             PLAYER_SIZE;
     }
 
-    // =================================================
-    // GRAVITY
-    // =================================================
+    const oldY = me.y;
 
-    const oldY =
-        me.y;
+    velocityY += GRAVITY;
 
-    velocityY +=
-        GRAVITY;
-
-    me.y +=
-        velocityY;
+    me.y += velocityY;
 
     onGround = false;
 
-    // =================================================
-    // PLATFORM COLLISION
-    // =================================================
-
-    if (
-        velocityY >= 0
-    ) {
+    if (velocityY >= 0) {
 
         for (
             const platform
             of platforms
         ) {
-
             const oldBottom =
                 oldY +
                 PLAYER_SIZE;
@@ -1136,57 +700,41 @@ function updatePlayer() {
                 overlapsX &&
                 crossedTop
             ) {
-
                 me.y =
                     platform.y -
                     PLAYER_SIZE;
 
                 velocityY = 0;
 
-                onGround =
-                    true;
+                onGround = true;
 
                 break;
             }
         }
     }
 
-    // =================================================
-    // FALL OFF BOTTOM
-    // =================================================
-
     if (
         me.y >
         canvas.height + 100
     ) {
-
         me.x =
             100 +
-            Math.random() *
-                300;
+            Math.random() * 300;
 
         me.y = 500;
 
         velocityX = 0;
-
         velocityY = 0;
     }
 
-    me.facing =
-        facing;
+    me.facing = facing;
 
     socket.emit(
         "playerMove",
         {
-
-            x:
-                me.x,
-
-            y:
-                me.y,
-
-            facing:
-                facing
+            x: me.x,
+            y: me.y,
+            facing: facing
         }
     );
 }
@@ -1200,73 +748,47 @@ function drawHearts(
     y,
     health
 ) {
-
-    ctx.font =
-        "24px Arial";
+    ctx.font = "24px Arial";
 
     for (
         let heart = 0;
-
         heart < 10;
-
         heart++
     ) {
-
         const amount =
             health -
             heart * 2;
 
-        if (
-            amount >= 2
-        ) {
-
-            // Full heart
+        if (amount >= 2) {
             ctx.fillStyle =
                 "#ff3030";
 
             ctx.fillText(
                 "♥",
-
                 x +
-                    heart *
-                        25,
-
+                    heart * 25,
                 y
             );
-        }
-
-        else if (
+        } else if (
             amount === 1
         ) {
-
-            // Half heart
             ctx.fillStyle =
                 "#ff9f1c";
 
             ctx.fillText(
                 "♥",
-
                 x +
-                    heart *
-                        25,
-
+                    heart * 25,
                 y
             );
-        }
-
-        else {
-
-            // Empty heart
+        } else {
             ctx.fillStyle =
                 "#666666";
 
             ctx.fillText(
                 "♡",
-
                 x +
-                    heart *
-                        25,
-
+                    heart * 25,
                 y
             );
         }
@@ -1281,7 +803,6 @@ function drawSword(
     player,
     swing
 ) {
-
     if (
         !swing ||
         player.dead
@@ -1297,7 +818,6 @@ function drawSword(
         elapsed >
         SWORD_SWING_TIME
     ) {
-
         return;
     }
 
@@ -1308,7 +828,6 @@ function drawSword(
     const direction =
         swing.facing;
 
-    // Sword rotates through a small arc.
     const startAngle =
         direction === 1
             ? -1.1
@@ -1335,11 +854,8 @@ function drawSword(
         player.y +
         PLAYER_SIZE / 2;
 
-    const handleLength =
-        8;
-
-    const bladeLength =
-        38;
+    const handleLength = 8;
+    const bladeLength = 38;
 
     const handleEndX =
         handX +
@@ -1367,7 +883,6 @@ function drawSword(
             bladeLength
         );
 
-    // Handle
     ctx.strokeStyle =
         "#8b5a2b";
 
@@ -1387,7 +902,6 @@ function drawSword(
 
     ctx.stroke();
 
-    // Blade
     ctx.strokeStyle =
         "#e8edf2";
 
@@ -1407,7 +921,6 @@ function drawSword(
 
     ctx.stroke();
 
-    // Blade center highlight
     ctx.strokeStyle =
         "#ffffff";
 
@@ -1426,51 +939,6 @@ function drawSword(
     );
 
     ctx.stroke();
-
-    // Crossguard
-    const guardAngle =
-        angle +
-        Math.PI / 2;
-
-    const guardSize =
-        8;
-
-    ctx.strokeStyle =
-        "#d4af37";
-
-    ctx.lineWidth = 4;
-
-    ctx.beginPath();
-
-    ctx.moveTo(
-        handleEndX +
-        Math.cos(
-            guardAngle
-        ) *
-        guardSize,
-
-        handleEndY +
-        Math.sin(
-            guardAngle
-        ) *
-        guardSize
-    );
-
-    ctx.lineTo(
-        handleEndX -
-        Math.cos(
-            guardAngle
-        ) *
-        guardSize,
-
-        handleEndY -
-        Math.sin(
-            guardAngle
-        ) *
-        guardSize
-    );
-
-    ctx.stroke();
 }
 
 // =====================================================
@@ -1486,10 +954,6 @@ function draw() {
         canvas.height
     );
 
-    // =================================================
-    // BACKGROUND
-    // =================================================
-
     ctx.fillStyle =
         "#11111b";
 
@@ -1500,10 +964,6 @@ function draw() {
         canvas.height
     );
 
-    // =================================================
-    // PLATFORMS
-    // =================================================
-
     ctx.fillStyle =
         "#dddddd";
 
@@ -1511,7 +971,6 @@ function draw() {
         const platform
         of platforms
     ) {
-
         ctx.fillRect(
             platform.x,
             platform.y,
@@ -1520,34 +979,17 @@ function draw() {
         );
     }
 
-    // =================================================
-    // PLAYERS
-    // =================================================
-
-    for (
-        const id
-        in players
-    ) {
+    for (const id in players) {
 
         const player =
             players[id];
 
-        if (!player) {
-            continue;
-        }
+        if (!player) continue;
 
-        if (
+        ctx.globalAlpha =
             player.dead
-        ) {
-
-            ctx.globalAlpha =
-                0.25;
-
-        } else {
-
-            ctx.globalAlpha =
-                1;
-        }
+                ? 0.25
+                : 1;
 
         ctx.fillStyle =
             player.color ||
@@ -1560,14 +1002,9 @@ function draw() {
             PLAYER_SIZE
         );
 
-        ctx.globalAlpha =
-            1;
+        ctx.globalAlpha = 1;
 
-        // YOU label
-        if (
-            id === myId
-        ) {
-
+        if (id === myId) {
             ctx.fillStyle =
                 "#ffffff";
 
@@ -1580,10 +1017,6 @@ function draw() {
                 player.y - 8
             );
         }
-
-        // =================================================
-        // HEALTH BAR ABOVE PLAYER
-        // =================================================
 
         const health =
             player.health ??
@@ -1617,10 +1050,6 @@ function draw() {
             3
         );
 
-        // =================================================
-        // DRAW SWORD SWING
-        // =================================================
-
         const swing =
             meleeSwings[id];
 
@@ -1634,28 +1063,20 @@ function draw() {
                 elapsed <=
                 SWORD_SWING_TIME
             ) {
-
                 drawSword(
                     player,
                     swing
                 );
-
             } else {
-
                 delete meleeSwings[id];
             }
         }
     }
 
-    // =================================================
-    // FIREBALLS
-    // =================================================
-
     for (
         const fireball
         of fireballs
     ) {
-
         ctx.beginPath();
 
         ctx.arc(
@@ -1687,10 +1108,6 @@ function draw() {
         ctx.fill();
     }
 
-    // =================================================
-    // HUD
-    // =================================================
-
     const me =
         players[myId];
 
@@ -1702,7 +1119,7 @@ function draw() {
         ctx.fillRect(
             12,
             10,
-            300,
+            310,
             115
         );
 
@@ -1744,15 +1161,11 @@ function draw() {
             "12px Arial";
 
         ctx.fillText(
-            "WASD / Arrows | F Sword",
+            "WASD or Arrows | F Sword | Space Attack",
             25,
             112
         );
     }
-
-    // =================================================
-    // FIREBALL CHARGE BAR
-    // =================================================
 
     if (
         spaceHeld &&
@@ -1771,8 +1184,7 @@ function draw() {
                 1
             );
 
-        const barWidth =
-            250;
+        const barWidth = 250;
 
         const x =
             canvas.width / 2 -
@@ -1798,8 +1210,7 @@ function draw() {
         ctx.fillRect(
             x,
             y,
-            barWidth *
-                charge,
+            barWidth * charge,
             20
         );
 
@@ -1835,10 +1246,6 @@ function draw() {
             "left";
     }
 
-    // =================================================
-    // DEAD SCREEN
-    // =================================================
-
     if (
         me &&
         me.dead
@@ -1865,29 +1272,20 @@ function draw() {
 
         ctx.fillText(
             "YOU DIED",
-
             canvas.width / 2,
-
-            canvas.height / 2 -
-                45
+            canvas.height / 2 - 45
         );
 
         respawnButton = {
-
             x:
-                canvas.width /
-                    2 -
+                canvas.width / 2 -
                 100,
 
             y:
-                canvas.height /
-                    2,
+                canvas.height / 2,
 
-            width:
-                200,
-
-            height:
-                55
+            width: 200,
+            height: 55
         };
 
         ctx.fillStyle =
@@ -1908,25 +1306,19 @@ function draw() {
 
         ctx.fillText(
             "RESPAWN",
-
             canvas.width / 2,
-
-            respawnButton.y +
-                35
+            respawnButton.y + 35
         );
 
         ctx.textAlign =
             "left";
-
     } else {
-
-        respawnButton =
-            null;
+        respawnButton = null;
     }
 }
 
 // =====================================================
-// RESPAWN BUTTON
+// RESPAWN CLICK
 // =====================================================
 
 canvas.addEventListener(
@@ -1941,7 +1333,6 @@ canvas.addEventListener(
             !me.dead ||
             !respawnButton
         ) {
-
             return;
         }
 
@@ -1985,7 +1376,6 @@ canvas.addEventListener(
                 respawnButton.y +
                 respawnButton.height
         ) {
-
             socket.emit(
                 "respawnPlayer"
             );
