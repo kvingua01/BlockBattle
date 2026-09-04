@@ -10,254 +10,25 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
-    res.sendFile(
-        path.join(
-            __dirname,
-            "public",
-            "index.html"
-        )
-    );
+    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // =====================================================
-// GAME SETTINGS
+// GAME CONSTANTS
 // =====================================================
 
-const MAX_HEALTH = 20;
+const PLAYER_SIZE = 30;
 
-// 20 health points = 10 hearts
-// 2 points = 1 full heart
-// 1 point = 1/2 heart
+const BASE_MAX_HEALTH = 20;     // 10 hearts
+const ABSOLUTE_MAX_HEALTH = 40; // 20 hearts
 
-const PLATFORM_CHANGE_TIME =
-    10 * 60 * 1000;
+const PLATFORM_CHANGE_TIME = 10 * 60 * 1000;
 
-// 10 minutes
-
-// =====================================================
-// PLATFORM LAYOUTS
-// =====================================================
-//
-// These are NOT completely random individual platforms.
-//
-// Instead, the server randomly chooses one of these
-// tested layouts.
-//
-// That prevents impossible levels where there is
-// no way to reach the top.
-//
-// The bottom floor is always present.
-// =====================================================
-
-const PLATFORM_LAYOUTS = [
-
-    // =================================================
-    // LAYOUT 1
-    // =================================================
-
-    [
-        { x: 0, y: 570, width: 800, height: 30 },
-
-        { x: 80, y: 490, width: 180, height: 20 },
-
-        { x: 350, y: 420, width: 180, height: 20 },
-
-        { x: 100, y: 340, width: 170, height: 20 },
-
-        { x: 430, y: 270, width: 170, height: 20 },
-
-        { x: 180, y: 190, width: 170, height: 20 },
-
-        { x: 450, y: 110, width: 170, height: 20 },
-
-        { x: 280, y: 40, width: 220, height: 20 }
-    ],
-
-    // =================================================
-    // LAYOUT 2
-    // =================================================
-
-    [
-        { x: 0, y: 570, width: 800, height: 30 },
-
-        { x: 500, y: 500, width: 180, height: 20 },
-
-        { x: 270, y: 430, width: 170, height: 20 },
-
-        { x: 70, y: 355, width: 180, height: 20 },
-
-        { x: 330, y: 285, width: 180, height: 20 },
-
-        { x: 540, y: 210, width: 170, height: 20 },
-
-        { x: 290, y: 135, width: 180, height: 20 },
-
-        { x: 80, y: 60, width: 190, height: 20 }
-    ],
-
-    // =================================================
-    // LAYOUT 3
-    // =================================================
-
-    [
-        { x: 0, y: 570, width: 800, height: 30 },
-
-        { x: 100, y: 500, width: 160, height: 20 },
-
-        { x: 310, y: 440, width: 160, height: 20 },
-
-        { x: 520, y: 375, width: 160, height: 20 },
-
-        { x: 300, y: 305, width: 160, height: 20 },
-
-        { x: 80, y: 235, width: 160, height: 20 },
-
-        { x: 300, y: 165, width: 160, height: 20 },
-
-        { x: 520, y: 95, width: 160, height: 20 },
-
-        { x: 300, y: 30, width: 200, height: 20 }
-    ],
-
-    // =================================================
-    // LAYOUT 4
-    // =================================================
-
-    [
-        { x: 0, y: 570, width: 800, height: 30 },
-
-        { x: 310, y: 500, width: 180, height: 20 },
-
-        { x: 90, y: 430, width: 180, height: 20 },
-
-        { x: 360, y: 360, width: 180, height: 20 },
-
-        { x: 560, y: 290, width: 150, height: 20 },
-
-        { x: 320, y: 220, width: 170, height: 20 },
-
-        { x: 100, y: 150, width: 170, height: 20 },
-
-        { x: 350, y: 80, width: 180, height: 20 }
-    ],
-
-    // =================================================
-    // LAYOUT 5
-    // =================================================
-
-    [
-        { x: 0, y: 570, width: 800, height: 30 },
-
-        { x: 560, y: 500, width: 160, height: 20 },
-
-        { x: 380, y: 435, width: 160, height: 20 },
-
-        { x: 180, y: 370, width: 160, height: 20 },
-
-        { x: 20, y: 305, width: 160, height: 20 },
-
-        { x: 220, y: 240, width: 160, height: 20 },
-
-        { x: 430, y: 175, width: 160, height: 20 },
-
-        { x: 600, y: 110, width: 150, height: 20 },
-
-        { x: 350, y: 45, width: 180, height: 20 }
-    ],
-
-    // =================================================
-    // LAYOUT 6
-    // =================================================
-
-    [
-        { x: 0, y: 570, width: 800, height: 30 },
-
-        { x: 50, y: 500, width: 180, height: 20 },
-
-        { x: 250, y: 445, width: 160, height: 20 },
-
-        { x: 470, y: 390, width: 180, height: 20 },
-
-        { x: 290, y: 325, width: 160, height: 20 },
-
-        { x: 80, y: 260, width: 180, height: 20 },
-
-        { x: 300, y: 195, width: 180, height: 20 },
-
-        { x: 520, y: 130, width: 170, height: 20 },
-
-        { x: 300, y: 60, width: 200, height: 20 }
-    ]
+const POWERUP_TYPES = [
+    "health",
+    "dash",
+    "greenFireball"
 ];
-
-// =====================================================
-// CURRENT PLATFORM LAYOUT
-// =====================================================
-
-let currentLayoutIndex = 0;
-
-let currentPlatforms =
-    PLATFORM_LAYOUTS[currentLayoutIndex];
-
-// =====================================================
-// CHOOSE NEW RANDOM LAYOUT
-// =====================================================
-
-function chooseNewPlatformLayout() {
-
-    let newIndex;
-
-    // Make sure it doesn't pick the exact
-    // same layout twice in a row.
-
-    do {
-
-        newIndex =
-            Math.floor(
-                Math.random() *
-                PLATFORM_LAYOUTS.length
-            );
-
-    } while (
-        newIndex === currentLayoutIndex &&
-        PLATFORM_LAYOUTS.length > 1
-    );
-
-    currentLayoutIndex =
-        newIndex;
-
-    currentPlatforms =
-        PLATFORM_LAYOUTS[
-            currentLayoutIndex
-        ];
-
-    console.log(
-        "Platform layout changed to:",
-        currentLayoutIndex + 1
-    );
-
-    // Everyone changes at the same time.
-
-    io.emit(
-        "platformLayoutChanged",
-        {
-            platforms:
-                currentPlatforms,
-
-            layoutNumber:
-                currentLayoutIndex + 1
-        }
-    );
-}
-
-// =====================================================
-// CHANGE EVERY 10 MINUTES
-// =====================================================
-
-setInterval(
-    chooseNewPlatformLayout,
-    PLATFORM_CHANGE_TIME
-);
 
 // =====================================================
 // PLAYERS
@@ -265,10 +36,99 @@ setInterval(
 
 const players = {};
 
+// =====================================================
+// POWERUPS
+// =====================================================
+
+const powerups = {};
+
+let powerupCounter = 0;
+
+// =====================================================
+// PLATFORMS
+// =====================================================
+
+let platforms = [];
+
+function clamp(value, minimum, maximum) {
+    return Math.max(
+        minimum,
+        Math.min(maximum, value)
+    );
+}
+
+function generatePlatforms() {
+
+    const newPlatforms = [];
+
+    // Ground
+    newPlatforms.push({
+        x: 0,
+        y: 570,
+        width: 800,
+        height: 30
+    });
+
+    // These heights guarantee a climbable path.
+    const heights = [
+        490,
+        410,
+        330,
+        250,
+        170,
+        90,
+        30
+    ];
+
+    let previousX =
+        80 + Math.random() * 450;
+
+    for (
+        let i = 0;
+        i < heights.length;
+        i++
+    ) {
+
+        const width =
+            i === heights.length - 1
+                ? 220
+                : 170;
+
+        const horizontalChange =
+            -120 + Math.random() * 240;
+
+        let newX =
+            previousX +
+            horizontalChange;
+
+        newX = clamp(
+            newX,
+            20,
+            800 - width - 20
+        );
+
+        newPlatforms.push({
+            x: Math.round(newX),
+            y: heights[i],
+            width: width,
+            height: 20
+        });
+
+        previousX = newX;
+    }
+
+    return newPlatforms;
+}
+
+platforms = generatePlatforms();
+
+// =====================================================
+// CREATE PLAYER
+// =====================================================
+
 function createPlayer() {
 
     return {
-
         x:
             100 +
             Math.random() * 300,
@@ -285,18 +145,272 @@ function createPlayer() {
                 .padStart(6, "0"),
 
         health:
-            MAX_HEALTH,
+            BASE_MAX_HEALTH,
 
-        dead:
-            false,
+        maxHealth:
+            BASE_MAX_HEALTH,
 
-        facing:
-            1
+        dead: false,
+
+        facing: 1,
+
+        dashLevel: 0,
+
+        greenLevel: 0,
+
+        respawnAllowedAt: 0
     };
 }
 
 // =====================================================
-// SOCKET CONNECTION
+// POWERUP CREATION
+// =====================================================
+
+function createRandomPowerup(player) {
+
+    const type =
+        POWERUP_TYPES[
+            Math.floor(
+                Math.random() *
+                POWERUP_TYPES.length
+            )
+        ];
+
+    powerupCounter++;
+
+    const id =
+        "powerup-" +
+        Date.now() +
+        "-" +
+        powerupCounter;
+
+    const powerup = {
+        id: id,
+        type: type,
+
+        x: clamp(
+            player.x +
+                PLAYER_SIZE / 2,
+            20,
+            780
+        ),
+
+        y: clamp(
+            player.y +
+                PLAYER_SIZE / 2,
+            40,
+            550
+        )
+    };
+
+    powerups[id] =
+        powerup;
+
+    io.emit(
+        "powerupSpawned",
+        powerup
+    );
+
+    return powerup;
+}
+
+// =====================================================
+// MOVE EXISTING POWERUPS WHEN MAP CHANGES
+// =====================================================
+
+function repositionPowerups() {
+
+    const usablePlatforms =
+        platforms.slice(1);
+
+    for (
+        const id in powerups
+    ) {
+
+        const powerup =
+            powerups[id];
+
+        const platform =
+            usablePlatforms[
+                Math.floor(
+                    Math.random() *
+                    usablePlatforms.length
+                )
+            ];
+
+        powerup.x =
+            platform.x +
+            20 +
+            Math.random() *
+                Math.max(
+                    1,
+                    platform.width - 40
+                );
+
+        powerup.y =
+            platform.y - 15;
+    }
+}
+
+// =====================================================
+// PLAYER DEATH
+// =====================================================
+
+function killPlayer(playerId) {
+
+    const player =
+        players[playerId];
+
+    if (
+        !player ||
+        player.dead
+    ) {
+        return;
+    }
+
+    player.health = 0;
+    player.dead = true;
+
+    // Lose ALL powerups/upgrades.
+    player.maxHealth =
+        BASE_MAX_HEALTH;
+
+    player.dashLevel = 0;
+
+    player.greenLevel = 0;
+
+    player.respawnAllowedAt =
+        Date.now() + 5000;
+
+    // Drop exactly ONE random powerup.
+    createRandomPowerup(player);
+
+    io.emit(
+        "playerHealthChanged",
+        {
+            id: playerId,
+
+            health:
+                player.health,
+
+            maxHealth:
+                player.maxHealth,
+
+            dead: true,
+
+            respawnAllowedAt:
+                player.respawnAllowedAt
+        }
+    );
+
+    io.emit(
+        "playerPowerupChanged",
+        {
+            id: playerId,
+
+            health:
+                player.health,
+
+            maxHealth:
+                player.maxHealth,
+
+            dashLevel:
+                player.dashLevel,
+
+            greenLevel:
+                player.greenLevel
+        }
+    );
+}
+
+// =====================================================
+// DAMAGE
+// =====================================================
+
+function damagePlayer(
+    targetId,
+    amount
+) {
+
+    const target =
+        players[targetId];
+
+    if (
+        !target ||
+        target.dead
+    ) {
+        return false;
+    }
+
+    target.health -=
+        amount;
+
+    if (
+        target.health <= 0
+    ) {
+
+        killPlayer(
+            targetId
+        );
+
+        return true;
+    }
+
+    io.emit(
+        "playerHealthChanged",
+        {
+            id:
+                targetId,
+
+            health:
+                target.health,
+
+            maxHealth:
+                target.maxHealth,
+
+            dead: false,
+
+            respawnAllowedAt: 0
+        }
+    );
+
+    return false;
+}
+
+// =====================================================
+// CHANGE PLATFORMS EVERY 10 MINUTES
+// =====================================================
+
+setInterval(
+    () => {
+
+        platforms =
+            generatePlatforms();
+
+        // Powerups stay forever,
+        // but move onto the new reachable platforms.
+        repositionPowerups();
+
+        io.emit(
+            "platformLayoutChanged",
+            platforms
+        );
+
+        io.emit(
+            "currentPowerups",
+            powerups
+        );
+
+        console.log(
+            "Platforms changed!"
+        );
+
+    },
+    PLATFORM_CHANGE_TIME
+);
+
+// =====================================================
+// CONNECTION
 // =====================================================
 
 io.on(
@@ -311,30 +425,20 @@ io.on(
         players[socket.id] =
             createPlayer();
 
-        // Send current players.
+        socket.emit(
+            "platformLayout",
+            platforms
+        );
+
+        socket.emit(
+            "currentPowerups",
+            powerups
+        );
 
         socket.emit(
             "currentPlayers",
             players
         );
-
-        // IMPORTANT:
-        // Send the CURRENT platform layout
-        // to anyone who joins the game.
-
-        socket.emit(
-            "platformLayoutChanged",
-            {
-                platforms:
-                    currentPlatforms,
-
-                layoutNumber:
-                    currentLayoutIndex + 1
-            }
-        );
-
-        // Tell everyone else
-        // about the new player.
 
         socket.broadcast.emit(
             "newPlayer",
@@ -342,7 +446,9 @@ io.on(
                 id:
                     socket.id,
 
-                ...players[socket.id]
+                ...players[
+                    socket.id
+                ]
             }
         );
 
@@ -451,7 +557,7 @@ io.on(
         );
 
         // =================================================
-        // FIREBALL
+        // NORMAL FIREBALL
         // =================================================
 
         socket.on(
@@ -486,8 +592,6 @@ io.on(
             }
         );
 
-        // Fireball = ONE HEART
-
         socket.on(
             "fireballHit",
             (data) => {
@@ -521,35 +625,103 @@ io.on(
                     return;
                 }
 
-                target.health -= 2;
+                // Normal fireball = 1 heart
+                damagePlayer(
+                    data.targetId,
+                    2
+                );
+            }
+        );
+
+        // =================================================
+        // GREEN FIREBALL
+        // =================================================
+
+        socket.on(
+            "shootGreenFireball",
+            (fireball) => {
+
+                const player =
+                    players[socket.id];
 
                 if (
-                    target.health <= 0
+                    !player ||
+                    player.dead ||
+                    player.greenLevel <= 0
                 ) {
-
-                    target.health = 0;
-
-                    target.dead = true;
+                    return;
                 }
 
-                io.emit(
-                    "playerHealthChanged",
+                socket.broadcast.emit(
+                    "spawnFireball",
+                    fireball
+                );
+            }
+        );
+
+        socket.on(
+            "greenFireballHit",
+            (data) => {
+
+                if (
+                    !data ||
+                    !data.targetId
+                ) {
+                    return;
+                }
+
+                const attacker =
+                    players[socket.id];
+
+                const target =
+                    players[
+                        data.targetId
+                    ];
+
+                if (
+                    !attacker ||
+                    attacker.dead ||
+                    attacker.greenLevel <= 0
+                ) {
+                    return;
+                }
+
+                if (
+                    !target ||
+                    target.dead
+                ) {
+                    return;
+                }
+
+                // Green fireball = HALF heart
+                damagePlayer(
+                    data.targetId,
+                    1
+                );
+
+                // Double normal knockback.
+                const direction =
+                    data.direction === -1
+                        ? -1
+                        : 1;
+
+                io.to(
+                    data.targetId
+                ).emit(
+                    "receiveKnockback",
                     {
-                        id:
-                            data.targetId,
+                        velocityX:
+                            direction * 60,
 
-                        health:
-                            target.health,
-
-                        dead:
-                            target.dead
+                        velocityY:
+                            -20
                     }
                 );
             }
         );
 
         // =================================================
-        // SWORD VISUAL
+        // SWORD
         // =================================================
 
         socket.on(
@@ -562,6 +734,13 @@ io.on(
                 if (
                     !player ||
                     player.dead
+                ) {
+                    return;
+                }
+
+                // Green fireball perk replaces sword.
+                if (
+                    player.greenLevel > 0
                 ) {
                     return;
                 }
@@ -588,14 +767,6 @@ io.on(
             }
         );
 
-        // =================================================
-        // SWORD DAMAGE
-        // =================================================
-        //
-        // Every sword hit =
-        // HALF A HEART.
-        // =================================================
-
         socket.on(
             "meleeHit",
             (data) => {
@@ -617,7 +788,8 @@ io.on(
 
                 if (
                     !attacker ||
-                    attacker.dead
+                    attacker.dead ||
+                    attacker.greenLevel > 0
                 ) {
                     return;
                 }
@@ -629,16 +801,11 @@ io.on(
                     return;
                 }
 
-                target.health -= 1;
-
-                if (
-                    target.health <= 0
-                ) {
-
-                    target.health = 0;
-
-                    target.dead = true;
-                }
+                // Sword = half heart.
+                damagePlayer(
+                    data.targetId,
+                    1
+                );
 
                 io.to(
                     data.targetId
@@ -652,18 +819,153 @@ io.on(
                             -2
                     }
                 );
+            }
+        );
+
+        // =================================================
+        // POWERUP PICKUP
+        // =================================================
+
+        socket.on(
+            "pickupPowerup",
+            (powerupId) => {
+
+                const player =
+                    players[socket.id];
+
+                const powerup =
+                    powerups[
+                        powerupId
+                    ];
+
+                if (
+                    !player ||
+                    player.dead ||
+                    !powerup
+                ) {
+                    return;
+                }
+
+                const playerCenterX =
+                    player.x +
+                    PLAYER_SIZE / 2;
+
+                const playerCenterY =
+                    player.y +
+                    PLAYER_SIZE / 2;
+
+                const dx =
+                    playerCenterX -
+                    powerup.x;
+
+                const dy =
+                    playerCenterY -
+                    powerup.y;
+
+                const distance =
+                    Math.sqrt(
+                        dx * dx +
+                        dy * dy
+                    );
+
+                // Make sure the player is actually close.
+                if (
+                    distance > 55
+                ) {
+                    return;
+                }
+
+                // -----------------------------------------
+                // HEALTH POWERUP
+                // -----------------------------------------
+
+                if (
+                    powerup.type ===
+                    "health"
+                ) {
+
+                    player.maxHealth =
+                        Math.min(
+                            ABSOLUTE_MAX_HEALTH,
+
+                            player.maxHealth +
+                                4
+                        );
+                }
+
+                // -----------------------------------------
+                // DASH POWERUP
+                // -----------------------------------------
+
+                if (
+                    powerup.type ===
+                    "dash"
+                ) {
+
+                    player.dashLevel++;
+                }
+
+                // -----------------------------------------
+                // GREEN FIREBALL POWERUP
+                // -----------------------------------------
+
+                if (
+                    powerup.type ===
+                    "greenFireball"
+                ) {
+
+                    player.greenLevel++;
+                }
+
+                // EVERY powerup heals to max.
+                player.health =
+                    player.maxHealth;
+
+                delete powerups[
+                    powerupId
+                ];
+
+                io.emit(
+                    "powerupRemoved",
+                    powerupId
+                );
+
+                io.emit(
+                    "playerPowerupChanged",
+                    {
+                        id:
+                            socket.id,
+
+                        health:
+                            player.health,
+
+                        maxHealth:
+                            player.maxHealth,
+
+                        dashLevel:
+                            player.dashLevel,
+
+                        greenLevel:
+                            player.greenLevel
+                    }
+                );
 
                 io.emit(
                     "playerHealthChanged",
                     {
                         id:
-                            data.targetId,
+                            socket.id,
 
                         health:
-                            target.health,
+                            player.health,
 
-                        dead:
-                            target.dead
+                        maxHealth:
+                            player.maxHealth,
+
+                        dead: false,
+
+                        respawnAllowedAt:
+                            0
                     }
                 );
             }
@@ -687,22 +989,41 @@ io.on(
                     return;
                 }
 
+                // Must wait 5 seconds.
+                if (
+                    Date.now() <
+                    player.respawnAllowedAt
+                ) {
+                    return;
+                }
+
                 player.x =
                     100 +
-                    Math.random() *
-                        300;
+                    Math.random() * 300;
 
                 player.y =
                     500;
 
                 player.health =
-                    MAX_HEALTH;
+                    BASE_MAX_HEALTH;
+
+                player.maxHealth =
+                    BASE_MAX_HEALTH;
 
                 player.dead =
                     false;
 
                 player.facing =
                     1;
+
+                player.dashLevel =
+                    0;
+
+                player.greenLevel =
+                    0;
+
+                player.respawnAllowedAt =
+                    0;
 
                 io.emit(
                     "playerRespawned",
@@ -719,11 +1040,20 @@ io.on(
                         health:
                             player.health,
 
-                        dead:
-                            false,
+                        maxHealth:
+                            player.maxHealth,
+
+                        dead: false,
 
                         facing:
-                            player.facing
+                            player.facing,
+
+                        dashLevel: 0,
+
+                        greenLevel: 0,
+
+                        respawnAllowedAt:
+                            0
                     }
                 );
             }
@@ -778,16 +1108,10 @@ server.listen(
             "=============================="
         );
         console.log("");
-
         console.log(
             "Server running on port " +
             PORT
         );
-
-        console.log(
-            "Platforms change every 10 minutes."
-        );
-
         console.log("");
     }
 );
