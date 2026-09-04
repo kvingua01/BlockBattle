@@ -19,7 +19,6 @@ app.use(
 app.get(
     "/",
     (req, res) => {
-
         res.sendFile(
             path.join(
                 __dirname,
@@ -61,7 +60,6 @@ const POWERUP_TYPES = [
 // =====================================================
 
 const players = {};
-
 const powerups = {};
 
 let powerupCounter = 0;
@@ -83,7 +81,6 @@ function clamp(
     minimum,
     maximum
 ) {
-
     return Math.max(
         minimum,
         Math.min(
@@ -97,7 +94,6 @@ function randomBetween(
     min,
     max
 ) {
-
     return (
         min +
         Math.random() *
@@ -106,14 +102,12 @@ function randomBetween(
 }
 
 function getPlayerCount() {
-
     return Object.keys(
         players
     ).length;
 }
 
 function shouldUseLargeMap() {
-
     return (
         getPlayerCount() >=
         LARGE_MAP_PLAYER_COUNT
@@ -124,22 +118,31 @@ function shouldUseLargeMap() {
 // PLATFORM GENERATION
 // =====================================================
 //
-// NEW SYSTEM:
+// NEW SPACING SYSTEM
 //
-// Normal map:
-// - Ground
-// - Two platforms on most height levels
-// - Platforms spread between left and right
-// - Positions randomly shift every map
-// - Some center platforms get added
+// NORMAL MAP:
 //
-// Large map:
-// - Ground
-// - Three platforms across most levels
-// - Left / center / right spread
+// Platforms are separated into:
+// LEFT
+// CENTER
+// RIGHT
 //
-// This prevents the whole map from
-// randomly drifting to one side.
+// Each vertical row is around 80px apart.
+//
+// NO extra platforms are squeezed between rows.
+//
+// Random row styles:
+// LEFT + RIGHT
+// LEFT + CENTER
+// CENTER + RIGHT
+//
+// This keeps the map spread out without
+// using one exact fixed layout.
+//
+// LARGE MAP:
+//
+// Uses LEFT / CENTER / RIGHT on each row,
+// but all rows remain vertically spaced.
 // =====================================================
 
 function generatePlatforms() {
@@ -162,24 +165,254 @@ function generatePlatforms() {
     });
 
     // =================================================
-    // NORMAL 800 x 600 MAP
+    // NORMAL MAP
+    // 800 x 600
     // =================================================
 
-    if (
-        !largeMap
-    ) {
+    if (!largeMap) {
 
-        const platformWidth = 155;
+        const platformWidth = 145;
         const platformHeight = 20;
 
+        // Nice even vertical spacing.
         const rows = [
             490,
             410,
             330,
             250,
             170,
-            90,
-            30
+            90
+        ];
+
+        // Prevent the same pair from
+        // repeating every single row.
+        let previousStyle = -1;
+
+        for (
+            let i = 0;
+            i < rows.length;
+            i++
+        ) {
+
+            const y =
+                rows[i];
+
+            // -----------------------------------------
+            // THREE HORIZONTAL ZONES
+            // -----------------------------------------
+
+            const leftX =
+                randomBetween(
+                    35,
+                    150
+                );
+
+            const centerX =
+                randomBetween(
+                    325,
+                    405
+                );
+
+            const rightX =
+                randomBetween(
+                    605,
+                    635
+                );
+
+            // -----------------------------------------
+            // PICK TWO ZONES FOR THIS ROW
+            //
+            // 0 = LEFT + RIGHT
+            // 1 = LEFT + CENTER
+            // 2 = CENTER + RIGHT
+            // -----------------------------------------
+
+            let style =
+                Math.floor(
+                    Math.random() * 3
+                );
+
+            // Try not to repeat the same
+            // arrangement twice in a row.
+            if (
+                style ===
+                previousStyle
+            ) {
+
+                style =
+                    (
+                        style +
+                        1 +
+                        Math.floor(
+                            Math.random() * 2
+                        )
+                    ) % 3;
+            }
+
+            previousStyle =
+                style;
+
+            // LEFT + RIGHT
+            if (
+                style === 0
+            ) {
+
+                newPlatforms.push({
+                    x:
+                        Math.round(
+                            leftX
+                        ),
+
+                    y:
+                        y,
+
+                    width:
+                        platformWidth,
+
+                    height:
+                        platformHeight
+                });
+
+                newPlatforms.push({
+                    x:
+                        Math.round(
+                            rightX
+                        ),
+
+                    y:
+                        y,
+
+                    width:
+                        platformWidth,
+
+                    height:
+                        platformHeight
+                });
+            }
+
+            // LEFT + CENTER
+            else if (
+                style === 1
+            ) {
+
+                newPlatforms.push({
+                    x:
+                        Math.round(
+                            leftX
+                        ),
+
+                    y:
+                        y,
+
+                    width:
+                        platformWidth,
+
+                    height:
+                        platformHeight
+                });
+
+                newPlatforms.push({
+                    x:
+                        Math.round(
+                            centerX
+                        ),
+
+                    y:
+                        y,
+
+                    width:
+                        platformWidth,
+
+                    height:
+                        platformHeight
+                });
+            }
+
+            // CENTER + RIGHT
+            else {
+
+                newPlatforms.push({
+                    x:
+                        Math.round(
+                            centerX
+                        ),
+
+                    y:
+                        y,
+
+                    width:
+                        platformWidth,
+
+                    height:
+                        platformHeight
+                });
+
+                newPlatforms.push({
+                    x:
+                        Math.round(
+                            rightX
+                        ),
+
+                    y:
+                        y,
+
+                    width:
+                        platformWidth,
+
+                    height:
+                        platformHeight
+                });
+            }
+        }
+
+        // =================================================
+        // TOP PLATFORM
+        // =================================================
+
+        newPlatforms.push({
+            x:
+                Math.round(
+                    randomBetween(
+                        285,
+                        355
+                    )
+                ),
+
+            y:
+                25,
+
+            width:
+                180,
+
+            height:
+                20
+        });
+    }
+
+    // =================================================
+    // LARGE MAP
+    // 1600 x 1200
+    // =================================================
+
+    else {
+
+        const platformWidth = 180;
+        const platformHeight = 20;
+
+        const rows = [
+            1090,
+            1010,
+            930,
+            850,
+            770,
+            690,
+            610,
+            530,
+            450,
+            370,
+            290,
+            210,
+            130
         ];
 
         for (
@@ -192,263 +425,37 @@ function generatePlatforms() {
                 rows[i];
 
             // -----------------------------------------
-            // LEFT SIDE PLATFORM
-            // -----------------------------------------
-
-            let leftX =
-                randomBetween(
-                    35,
-                    220
-                );
-
-            // -----------------------------------------
-            // RIGHT SIDE PLATFORM
-            // -----------------------------------------
-
-            let rightX =
-                randomBetween(
-                    430,
-                    610
-                );
-
-            // Every other row gets a little more
-            // center bias so the map has crossover
-            // routes and does not feel like two
-            // perfectly straight columns.
-
-            if (
-                i % 2 === 1
-            ) {
-
-                leftX +=
-                    randomBetween(
-                        30,
-                        70
-                    );
-
-                rightX -=
-                    randomBetween(
-                        30,
-                        70
-                    );
-            }
-
-            leftX =
-                clamp(
-                    leftX,
-                    20,
-                    mapWidth -
-                    platformWidth -
-                    20
-                );
-
-            rightX =
-                clamp(
-                    rightX,
-                    20,
-                    mapWidth -
-                    platformWidth -
-                    20
-                );
-
-            newPlatforms.push({
-                x:
-                    Math.round(
-                        leftX
-                    ),
-
-                y:
-                    y,
-
-                width:
-                    platformWidth,
-
-                height:
-                    platformHeight
-            });
-
-            newPlatforms.push({
-                x:
-                    Math.round(
-                        rightX
-                    ),
-
-                y:
-                    y,
-
-                width:
-                    platformWidth,
-
-                height:
-                    platformHeight
-            });
-
-            // -----------------------------------------
-            // OCCASIONAL CENTER PLATFORM
-            // -----------------------------------------
-            //
-            // This is random so every map is different.
-            // It also creates more ways to cross
-            // from one side to the other.
-
-            if (
-                i > 0 &&
-                i <
-                rows.length - 1 &&
-                Math.random() <
-                0.55
-            ) {
-
-                const centerWidth =
-                    130;
-
-                const centerX =
-                    randomBetween(
-                        315,
-                        355
-                    );
-
-                newPlatforms.push({
-                    x:
-                        Math.round(
-                            centerX
-                        ),
-
-                    y:
-                        y - 35,
-
-                    width:
-                        centerWidth,
-
-                    height:
-                        platformHeight
-                });
-            }
-        }
-
-        // Wider top goal-like platform
-        newPlatforms.push({
-            x:
-                Math.round(
-                    randomBetween(
-                        275,
-                        325
-                    )
-                ),
-
-            y:
-                5,
-
-            width:
-                220,
-
-            height:
-                20
-        });
-    }
-
-    // =================================================
-    // LARGE 1600 x 1200 MAP
-    // =================================================
-
-    else {
-
-        const platformWidth = 190;
-        const platformHeight = 20;
-
-        const rowGap = 80;
-
-        let y =
-            mapHeight - 110;
-
-        let rowNumber = 0;
-
-        while (
-            y > 40
-        ) {
-
-            // -----------------------------------------
             // LEFT ZONE
             // -----------------------------------------
 
-            let leftX =
+            const leftX =
                 randomBetween(
-                    40,
-                    320
+                    50,
+                    300
                 );
 
             // -----------------------------------------
             // CENTER ZONE
             // -----------------------------------------
 
-            let centerX =
+            const centerX =
                 randomBetween(
-                    570,
-                    820
+                    700,
+                    830
                 );
 
             // -----------------------------------------
             // RIGHT ZONE
             // -----------------------------------------
 
-            let rightX =
+            const rightX =
                 randomBetween(
-                    1050,
-                    1350
+                    1250,
+                    1370
                 );
 
-            // Stagger rows so they don't look
-            // like boring straight vertical columns.
-
-            if (
-                rowNumber % 2 === 1
-            ) {
-
-                leftX +=
-                    randomBetween(
-                        60,
-                        130
-                    );
-
-                centerX -=
-                    randomBetween(
-                        20,
-                        80
-                    );
-
-                rightX -=
-                    randomBetween(
-                        60,
-                        130
-                    );
-            }
-
-            leftX =
-                clamp(
-                    leftX,
-                    20,
-                    mapWidth -
-                    platformWidth -
-                    20
-                );
-
-            centerX =
-                clamp(
-                    centerX,
-                    20,
-                    mapWidth -
-                    platformWidth -
-                    20
-                );
-
-            rightX =
-                clamp(
-                    rightX,
-                    20,
-                    mapWidth -
-                    platformWidth -
-                    20
-                );
+            // Large map gets all three zones
+            // because there is much more width.
 
             newPlatforms.push({
                 x:
@@ -457,9 +464,7 @@ function generatePlatforms() {
                     ),
 
                 y:
-                    Math.round(
-                        y
-                    ),
+                    y,
 
                 width:
                     platformWidth,
@@ -475,9 +480,7 @@ function generatePlatforms() {
                     ),
 
                 y:
-                    Math.round(
-                        y
-                    ),
+                    y,
 
                 width:
                     platformWidth,
@@ -493,9 +496,7 @@ function generatePlatforms() {
                     ),
 
                 y:
-                    Math.round(
-                        y
-                    ),
+                    y,
 
                 width:
                     platformWidth,
@@ -503,64 +504,26 @@ function generatePlatforms() {
                 height:
                     platformHeight
             });
-
-            // Extra crossover platform on some rows.
-            if (
-                Math.random() <
-                0.5
-            ) {
-
-                const extraX =
-                    rowNumber % 2 === 0
-                        ? randomBetween(
-                            350,
-                            520
-                        )
-                        : randomBetween(
-                            850,
-                            1020
-                        );
-
-                newPlatforms.push({
-                    x:
-                        Math.round(
-                            extraX
-                        ),
-
-                    y:
-                        Math.round(
-                            y - 35
-                        ),
-
-                    width:
-                        150,
-
-                    height:
-                        platformHeight
-                });
-            }
-
-            y -=
-                rowGap;
-
-            rowNumber++;
         }
 
-        // Wide random top platform.
+        // =================================================
+        // LARGE TOP PLATFORM
+        // =================================================
+
         newPlatforms.push({
             x:
                 Math.round(
                     randomBetween(
-                        620,
+                        650,
                         760
                     )
                 ),
 
             y:
-                5,
+                45,
 
             width:
-                300,
+                260,
 
             height:
                 20
@@ -743,7 +706,7 @@ function repositionPowerups() {
 }
 
 // =====================================================
-// MAP SIZE CHANGES
+// MAP SIZE CHANGE
 // =====================================================
 
 function updateMapSize() {
@@ -1515,7 +1478,6 @@ io.on(
                     player.maxHealth =
                         Math.min(
                             ABSOLUTE_MAX_HEALTH,
-
                             player.maxHealth +
                             4
                         );
