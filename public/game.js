@@ -24,8 +24,8 @@ const MELEE_KNOCKBACK = 4;
 
 const MAX_HEALTH = 20;
 // 20 health points = 10 hearts.
-// 2 points = one full heart.
-// 1 point = half a heart.
+// 2 points = 1 full heart.
+// 1 point = 1/2 heart.
 
 const FIREBALL_CHARGE_TIME = 1000;
 
@@ -80,36 +80,26 @@ const platforms = [
 // =====================================================
 
 socket.on("connect", () => {
-
     myId = socket.id;
-
 });
 
 socket.on("currentPlayers", (serverPlayers) => {
-
     players = serverPlayers;
-
 });
 
 socket.on("newPlayer", (player) => {
-
     players[player.id] = player;
-
 });
 
 socket.on("playerMoved", (data) => {
-
     if (!players[data.id]) return;
 
     players[data.id].x = data.x;
     players[data.id].y = data.y;
-
 });
 
 socket.on("playerDisconnected", (id) => {
-
     delete players[id];
-
 });
 
 // =====================================================
@@ -117,29 +107,22 @@ socket.on("playerDisconnected", (id) => {
 // =====================================================
 
 socket.on("playerHealthChanged", (data) => {
-
     if (!players[data.id]) return;
 
     players[data.id].health = data.health;
     players[data.id].dead = data.dead;
 
     if (data.id === myId && data.dead) {
-
         velocityX = 0;
         velocityY = 0;
-
     }
-
 });
 
 socket.on("meleeCountChanged", (data) => {
-
     meleeCount = data.count;
-
 });
 
 socket.on("playerRespawned", (data) => {
-
     if (!players[data.id]) return;
 
     players[data.id].x = data.x;
@@ -148,14 +131,11 @@ socket.on("playerRespawned", (data) => {
     players[data.id].dead = false;
 
     if (data.id === myId) {
-
         velocityX = 0;
         velocityY = 0;
 
         meleeCount = 0;
-
     }
-
 });
 
 // =====================================================
@@ -163,14 +143,12 @@ socket.on("playerRespawned", (data) => {
 // =====================================================
 
 socket.on("receiveKnockback", (data) => {
-
     const me = players[myId];
 
     if (!me || me.dead) return;
 
     velocityX += data.velocityX;
     velocityY += data.velocityY;
-
 });
 
 // =====================================================
@@ -178,17 +156,13 @@ socket.on("receiveKnockback", (data) => {
 // =====================================================
 
 socket.on("spawnFireball", (fireball) => {
-
     fireballs.push(fireball);
-
 });
 
 socket.on("removeFireball", (data) => {
-
     fireballs = fireballs.filter(
         fireball => fireball.id !== data.id
     );
-
 });
 
 // =====================================================
@@ -196,7 +170,6 @@ socket.on("removeFireball", (data) => {
 // =====================================================
 
 document.addEventListener("keydown", (event) => {
-
     const key = event.key.toLowerCase();
 
     keys[key] = true;
@@ -206,28 +179,15 @@ document.addEventListener("keydown", (event) => {
     if (!me || me.dead) return;
 
     // -----------------------------
-    // JUMP
-    // -----------------------------
-
-    if (key === "w" && onGround) {
-
-        velocityY = -JUMP_POWER;
-        onGround = false;
-
-    }
-
-    // -----------------------------
     // SPACE START
     // -----------------------------
 
     if (event.code === "Space" && !spaceHeld) {
-
         event.preventDefault();
 
         spaceHeld = true;
 
         spacePressedAt = Date.now();
-
     }
 
     // -----------------------------
@@ -235,49 +195,36 @@ document.addEventListener("keydown", (event) => {
     // -----------------------------
 
     if (key === "f" && !event.repeat) {
-
         performMeleeAttack();
-
     }
-
 });
 
 document.addEventListener("keyup", (event) => {
-
     const key = event.key.toLowerCase();
 
     keys[key] = false;
 
     if (event.code === "Space") {
-
         event.preventDefault();
 
         const me = players[myId];
 
         if (!me || me.dead) {
-
             spaceHeld = false;
             return;
-
         }
 
         const heldTime =
             Date.now() - spacePressedAt;
 
         if (heldTime >= FIREBALL_CHARGE_TIME) {
-
             shootFireball();
-
         } else {
-
             normalShove();
-
         }
 
         spaceHeld = false;
-
     }
-
 });
 
 // =====================================================
@@ -285,13 +232,11 @@ document.addEventListener("keyup", (event) => {
 // =====================================================
 
 function normalShove() {
-
     const me = players[myId];
 
     if (!me || me.dead) return;
 
     for (const id in players) {
-
         if (id === myId) continue;
 
         const target = players[id];
@@ -308,12 +253,10 @@ function normalShove() {
             Math.sqrt(dx * dx + dy * dy);
 
         if (distance <= NORMAL_SHOVE_RANGE) {
-
             const direction =
                 dx >= 0 ? 1 : -1;
 
             socket.emit("knockbackPlayer", {
-
                 targetId: id,
 
                 velocityX:
@@ -321,13 +264,9 @@ function normalShove() {
                     NORMAL_KNOCKBACK,
 
                 velocityY: -4
-
             });
-
         }
-
     }
-
 }
 
 // =====================================================
@@ -335,7 +274,6 @@ function normalShove() {
 // =====================================================
 
 function performMeleeAttack() {
-
     const me = players[myId];
 
     if (!me || me.dead) return;
@@ -344,7 +282,6 @@ function performMeleeAttack() {
     let closestDistance = Infinity;
 
     for (const id in players) {
-
         if (id === myId) continue;
 
         const target = players[id];
@@ -364,16 +301,13 @@ function performMeleeAttack() {
             distance <= MELEE_RANGE &&
             distance < closestDistance
         ) {
-
             closestDistance = distance;
 
             closestTarget = {
                 id: id,
                 player: target
             };
-
         }
-
     }
 
     if (!closestTarget) return;
@@ -384,16 +318,13 @@ function performMeleeAttack() {
             : -1;
 
     socket.emit("meleeHit", {
-
         targetId:
             closestTarget.id,
 
         velocityX:
             direction *
             MELEE_KNOCKBACK
-
     });
-
 }
 
 // =====================================================
@@ -401,7 +332,6 @@ function performMeleeAttack() {
 // =====================================================
 
 function shootFireball() {
-
     const me = players[myId];
 
     if (!me || me.dead) return;
@@ -413,7 +343,6 @@ function shootFireball() {
     let nearestDistance = Infinity;
 
     for (const id in players) {
-
         if (id === myId) continue;
 
         const target = players[id];
@@ -424,25 +353,19 @@ function shootFireball() {
             Math.abs(target.x - me.x);
 
         if (distance < nearestDistance) {
-
             nearestDistance = distance;
             nearestPlayer = target;
-
         }
-
     }
 
     if (nearestPlayer) {
-
         direction =
             nearestPlayer.x >= me.x
                 ? 1
                 : -1;
-
     }
 
     const fireball = {
-
         id:
             myId +
             "-" +
@@ -465,7 +388,6 @@ function shootFireball() {
             FIREBALL_SPEED,
 
         radius: 10
-
     };
 
     fireballs.push(fireball);
@@ -474,7 +396,6 @@ function shootFireball() {
         "shootFireball",
         fireball
     );
-
 }
 
 // =====================================================
@@ -482,13 +403,11 @@ function shootFireball() {
 // =====================================================
 
 function updateFireballs() {
-
     for (
         let i = fireballs.length - 1;
         i >= 0;
         i--
     ) {
-
         const fireball =
             fireballs[i];
 
@@ -498,13 +417,11 @@ function updateFireballs() {
         // Fireballs ignore platforms.
 
         // Remove if off screen.
-
         if (
             fireball.x < -100 ||
             fireball.x >
                 canvas.width + 100
         ) {
-
             socket.emit(
                 "removeFireball",
                 {
@@ -516,31 +433,22 @@ function updateFireballs() {
             fireballs.splice(i, 1);
 
             continue;
-
         }
 
         // Only the owner determines hits.
-        // This prevents both computers from
-        // reporting the same hit.
-
         if (
             fireball.ownerId !==
             myId
         ) {
-
             continue;
-
         }
 
         for (const id in players) {
-
             if (
                 id ===
                 fireball.ownerId
             ) {
-
                 continue;
-
             }
 
             const target =
@@ -550,9 +458,7 @@ function updateFireballs() {
                 !target ||
                 target.dead
             ) {
-
                 continue;
-
             }
 
             const centerX =
@@ -582,9 +488,7 @@ function updateFireballs() {
                 fireball.radius +
                     PLAYER_SIZE / 2
             ) {
-
                 // DAMAGE
-
                 socket.emit(
                     "fireballHit",
                     {
@@ -593,7 +497,6 @@ function updateFireballs() {
                 );
 
                 // BIG KNOCKBACK
-
                 const direction =
                     fireball.velocityX >= 0
                         ? 1
@@ -602,7 +505,6 @@ function updateFireballs() {
                 socket.emit(
                     "knockbackPlayer",
                     {
-
                         targetId: id,
 
                         velocityX:
@@ -610,7 +512,6 @@ function updateFireballs() {
                             FIREBALL_KNOCKBACK,
 
                         velocityY: -10
-
                     }
                 );
 
@@ -628,13 +529,9 @@ function updateFireballs() {
                 );
 
                 break;
-
             }
-
         }
-
     }
-
 }
 
 // =====================================================
@@ -642,18 +539,15 @@ function updateFireballs() {
 // =====================================================
 
 function updatePlayer() {
-
     const me = players[myId];
 
     if (!me) return;
 
     if (me.dead) {
-
         velocityX = 0;
         velocityY = 0;
 
         return;
-
     }
 
     // -----------------------------
@@ -661,38 +555,44 @@ function updatePlayer() {
     // -----------------------------
 
     if (keys["a"]) {
-
         velocityX =
             -MOVE_SPEED;
-
     } else if (keys["d"]) {
-
         velocityX =
             MOVE_SPEED;
-
     } else {
-
         velocityX *= 0.8;
 
         if (
             Math.abs(velocityX) <
             0.1
         ) {
-
             velocityX = 0;
-
         }
+    }
 
+    // -----------------------------
+    // AUTO-JUMP
+    // -----------------------------
+    // This restores the original behavior:
+    // if you keep holding W, you automatically
+    // jump again whenever you touch a platform.
+
+    if (
+        keys["w"] &&
+        onGround
+    ) {
+        velocityY =
+            -JUMP_POWER;
+
+        onGround = false;
     }
 
     me.x += velocityX;
 
     // Keep player inside screen.
-
     if (me.x < 0) {
-
         me.x = 0;
-
     }
 
     if (
@@ -700,11 +600,9 @@ function updatePlayer() {
         canvas.width -
             PLAYER_SIZE
     ) {
-
         me.x =
             canvas.width -
             PLAYER_SIZE;
-
     }
 
     // -----------------------------
@@ -724,12 +622,10 @@ function updatePlayer() {
     // -----------------------------
 
     if (velocityY >= 0) {
-
         for (
             const platform
             of platforms
         ) {
-
             const oldBottom =
                 oldY +
                 PLAYER_SIZE;
@@ -756,7 +652,6 @@ function updatePlayer() {
                 overlapsX &&
                 crossedTop
             ) {
-
                 me.y =
                     platform.y -
                     PLAYER_SIZE;
@@ -766,22 +661,16 @@ function updatePlayer() {
                 onGround = true;
 
                 break;
-
             }
-
         }
-
     }
 
     // If player falls off bottom,
     // put them back on the bottom.
-    // Falling does NOT remove health.
-
     if (
         me.y >
         canvas.height + 100
     ) {
-
         me.x =
             100 +
             Math.random() *
@@ -791,7 +680,6 @@ function updatePlayer() {
 
         velocityX = 0;
         velocityY = 0;
-
     }
 
     socket.emit(
@@ -801,7 +689,6 @@ function updatePlayer() {
             y: me.y
         }
     );
-
 }
 
 // =====================================================
@@ -813,7 +700,6 @@ function drawHearts(
     y,
     health
 ) {
-
     ctx.font =
         "24px Arial";
 
@@ -822,15 +708,12 @@ function drawHearts(
         heart < 10;
         heart++
     ) {
-
         const amount =
             health -
             heart * 2;
 
         if (amount >= 2) {
-
             // Full heart
-
             ctx.fillStyle =
                 "#ff3030";
 
@@ -841,13 +724,10 @@ function drawHearts(
                         25,
                 y
             );
-
         } else if (
             amount === 1
         ) {
-
             // Half heart
-
             ctx.fillStyle =
                 "#ff9f1c";
 
@@ -858,11 +738,8 @@ function drawHearts(
                         25,
                 y
             );
-
         } else {
-
             // Empty heart
-
             ctx.fillStyle =
                 "#666666";
 
@@ -873,11 +750,8 @@ function drawHearts(
                         25,
                 y
             );
-
         }
-
     }
-
 }
 
 // =====================================================
@@ -885,7 +759,6 @@ function drawHearts(
 // =====================================================
 
 function draw() {
-
     ctx.clearRect(
         0,
         0,
@@ -894,7 +767,6 @@ function draw() {
     );
 
     // Background
-
     ctx.fillStyle =
         "#11111b";
 
@@ -916,14 +788,12 @@ function draw() {
         const platform
         of platforms
     ) {
-
         ctx.fillRect(
             platform.x,
             platform.y,
             platform.width,
             platform.height
         );
-
     }
 
     // -----------------------------
@@ -934,22 +804,17 @@ function draw() {
         const id
         in players
     ) {
-
         const player =
             players[id];
 
         if (!player) continue;
 
         if (player.dead) {
-
             ctx.globalAlpha =
                 0.25;
-
         } else {
-
             ctx.globalAlpha =
                 1;
-
         }
 
         ctx.fillStyle =
@@ -966,9 +831,7 @@ function draw() {
         ctx.globalAlpha = 1;
 
         // YOU label
-
         if (id === myId) {
-
             ctx.fillStyle =
                 "#ffffff";
 
@@ -980,12 +843,9 @@ function draw() {
                 player.x,
                 player.y - 7
             );
-
         }
 
-        // Small health bar over
-        // every player's head.
-
+        // Small health bar over every player.
         const health =
             player.health ??
             MAX_HEALTH;
@@ -1013,7 +873,6 @@ function draw() {
                     MAX_HEALTH),
             3
         );
-
     }
 
     // -----------------------------
@@ -1024,7 +883,6 @@ function draw() {
         const fireball
         of fireballs
     ) {
-
         ctx.beginPath();
 
         ctx.arc(
@@ -1054,7 +912,6 @@ function draw() {
             "#ffe600";
 
         ctx.fill();
-
     }
 
     // -----------------------------
@@ -1065,7 +922,6 @@ function draw() {
         players[myId];
 
     if (me) {
-
         ctx.fillStyle =
             "rgba(0,0,0,0.75)";
 
@@ -1120,7 +976,6 @@ function draw() {
             25,
             112
         );
-
     }
 
     // -----------------------------
@@ -1132,7 +987,6 @@ function draw() {
         me &&
         !me.dead
     ) {
-
         const heldTime =
             Date.now() -
             spacePressedAt;
@@ -1205,7 +1059,6 @@ function draw() {
 
         ctx.textAlign =
             "left";
-
     }
 
     // -----------------------------
@@ -1216,7 +1069,6 @@ function draw() {
         me &&
         me.dead
     ) {
-
         ctx.fillStyle =
             "rgba(0,0,0,0.70)";
 
@@ -1244,7 +1096,6 @@ function draw() {
         );
 
         respawnButton = {
-
             x:
                 canvas.width /
                     2 -
@@ -1257,7 +1108,6 @@ function draw() {
             width: 200,
 
             height: 55
-
         };
 
         ctx.fillStyle =
@@ -1285,13 +1135,9 @@ function draw() {
 
         ctx.textAlign =
             "left";
-
     } else {
-
         respawnButton = null;
-
     }
-
 }
 
 // =====================================================
@@ -1301,7 +1147,6 @@ function draw() {
 canvas.addEventListener(
     "click",
     (event) => {
-
         const me =
             players[myId];
 
@@ -1310,9 +1155,7 @@ canvas.addEventListener(
             !me.dead ||
             !respawnButton
         ) {
-
             return;
-
         }
 
         const rect =
@@ -1348,13 +1191,10 @@ canvas.addEventListener(
                 respawnButton.y +
                     respawnButton.height
         ) {
-
             socket.emit(
                 "respawnPlayer"
             );
-
         }
-
     }
 );
 
@@ -1363,7 +1203,6 @@ canvas.addEventListener(
 // =====================================================
 
 function gameLoop() {
-
     updatePlayer();
 
     updateFireballs();
@@ -1373,7 +1212,6 @@ function gameLoop() {
     requestAnimationFrame(
         gameLoop
     );
-
 }
 
 gameLoop();
