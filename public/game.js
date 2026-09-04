@@ -116,9 +116,7 @@ function jumpHeld() {
 // DASH COOLDOWN
 // =====================================================
 
-function getDashCooldown(
-    player
-) {
+function getDashCooldown(player) {
 
     if (
         !player ||
@@ -127,15 +125,9 @@ function getDashCooldown(
         return 0;
     }
 
-    // Lv 1 = 7 sec
-    // Lv 2 = 6 sec
-    // Lv 3 = 5 sec
-    // Lv 4+ = 4 sec
-
     return Math.max(
         4,
-        8 -
-        player.dashLevel
+        8 - player.dashLevel
     ) * 1000;
 }
 
@@ -143,9 +135,7 @@ function getDashCooldown(
 // DASH POWER
 // =====================================================
 
-function getDashPower(
-    player
-) {
+function getDashPower(player) {
 
     if (
         !player ||
@@ -176,9 +166,7 @@ function getDashPower(
 // DASH DISTANCE PERCENT
 // =====================================================
 
-function getDashDistancePercent(
-    player
-) {
+function getDashDistancePercent(player) {
 
     if (
         !player ||
@@ -206,9 +194,7 @@ function getDashDistancePercent(
 // GREEN FIREBALL COOLDOWN
 // =====================================================
 
-function getGreenCooldown(
-    player
-) {
+function getGreenCooldown(player) {
 
     if (
         !player ||
@@ -217,15 +203,10 @@ function getGreenCooldown(
         return 0;
     }
 
-    // Lv 1 = 2.0 sec
-    // Lv 2 = 1.5 sec
-    // Lv 3+ = 1.0 sec
-
     return Math.max(
         1000,
         2500 -
-        player.greenLevel *
-        500
+        player.greenLevel * 500
     );
 }
 
@@ -284,8 +265,7 @@ socket.on(
             !!data.largeMap;
 
         mapChangeMessageUntil =
-            Date.now() +
-            4000;
+            Date.now() + 4000;
 
         goldControllerId = null;
         goldProgress = 0;
@@ -301,9 +281,7 @@ socket.on(
             ) {
 
                 const position =
-                    data.playerPositions[
-                        id
-                    ];
+                    data.playerPositions[id];
 
                 if (
                     players[id]
@@ -335,8 +313,7 @@ socket.on(
             newPlatforms;
 
         platformMessageUntil =
-            Date.now() +
-            3000;
+            Date.now() + 3000;
 
         goldControllerId = null;
         goldProgress = 0;
@@ -355,13 +332,11 @@ socket.on(
                 Math.random() *
                 Math.min(
                     300,
-                    canvas.width -
-                    200
+                    canvas.width - 200
                 );
 
             me.y =
-                canvas.height -
-                100;
+                canvas.height - 100;
 
             velocityX = 0;
             velocityY = 0;
@@ -369,14 +344,9 @@ socket.on(
             socket.emit(
                 "playerMove",
                 {
-                    x:
-                        me.x,
-
-                    y:
-                        me.y,
-
-                    facing:
-                        facing
+                    x: me.x,
+                    y: me.y,
+                    facing: facing
                 }
             );
         }
@@ -398,8 +368,7 @@ socket.on(
             data.progress || 0;
 
         goldRemaining =
-            data.remaining !==
-            undefined
+            data.remaining !== undefined
                 ? data.remaining
                 : 30;
     }
@@ -410,32 +379,26 @@ socket.on(
     (data) => {
 
         if (
-            data.playerId ===
-            myId
+            data.playerId === myId
         ) {
 
             let rewardName =
                 "POWERUP";
 
             if (
-                data.type ===
-                "health"
+                data.type === "health"
             ) {
-                rewardName =
-                    "HEALTH";
+                rewardName = "HEALTH";
             }
 
             if (
-                data.type ===
-                "dash"
+                data.type === "dash"
             ) {
-                rewardName =
-                    "DASH";
+                rewardName = "DASH";
             }
 
             if (
-                data.type ===
-                "greenFireball"
+                data.type === "greenFireball"
             ) {
                 rewardName =
                     "GREEN FIREBALL";
@@ -447,8 +410,7 @@ socket.on(
                 "!";
 
             goldRewardMessageUntil =
-                Date.now() +
-                3500;
+                Date.now() + 3500;
         }
     }
 );
@@ -462,8 +424,7 @@ socket.on(
     (serverPowerups) => {
 
         powerups =
-            serverPowerups ||
-            {};
+            serverPowerups || {};
     }
 );
 
@@ -471,9 +432,7 @@ socket.on(
     "powerupSpawned",
     (powerup) => {
 
-        powerups[
-            powerup.id
-        ] =
+        powerups[powerup.id] =
             powerup;
     }
 );
@@ -482,9 +441,7 @@ socket.on(
     "powerupRemoved",
     (powerupId) => {
 
-        delete powerups[
-            powerupId
-        ];
+        delete powerups[powerupId];
 
         delete powerupPickupAttempts[
             powerupId
@@ -518,9 +475,7 @@ socket.on(
     "newPlayer",
     (player) => {
 
-        players[
-            player.id
-        ] =
+        players[player.id] =
             player;
     }
 );
@@ -530,26 +485,18 @@ socket.on(
     (data) => {
 
         if (
-            !players[
-                data.id
-            ]
+            !players[data.id]
         ) {
             return;
         }
 
-        players[
-            data.id
-        ].x =
+        players[data.id].x =
             data.x;
 
-        players[
-            data.id
-        ].y =
+        players[data.id].y =
             data.y;
 
-        players[
-            data.id
-        ].facing =
+        players[data.id].facing =
             data.facing;
     }
 );
@@ -559,7 +506,6 @@ socket.on(
     (id) => {
 
         delete players[id];
-
         delete meleeSwings[id];
     }
 );
@@ -573,9 +519,7 @@ socket.on(
     (data) => {
 
         const player =
-            players[
-                data.id
-            ];
+            players[data.id];
 
         if (!player) {
             return;
@@ -585,8 +529,7 @@ socket.on(
             data.health;
 
         if (
-            data.maxHealth !==
-            undefined
+            data.maxHealth !== undefined
         ) {
 
             player.maxHealth =
@@ -623,9 +566,7 @@ socket.on(
     (data) => {
 
         const player =
-            players[
-                data.id
-            ];
+            players[data.id];
 
         if (!player) {
             return;
@@ -670,20 +611,14 @@ socket.on(
     (data) => {
 
         if (
-            !players[
-                data.id
-            ]
+            !players[data.id]
         ) {
 
-            players[
-                data.id
-            ] = {};
+            players[data.id] = {};
         }
 
         const player =
-            players[
-                data.id
-            ];
+            players[data.id];
 
         player.x =
             data.x;
@@ -763,15 +698,9 @@ socket.on(
     "playerMeleeSwing",
     (data) => {
 
-        meleeSwings[
-            data.id
-        ] = {
-
-            start:
-                Date.now(),
-
-            facing:
-                data.facing
+        meleeSwings[data.id] = {
+            start: Date.now(),
+            facing: data.facing
         };
     }
 );
@@ -797,8 +726,7 @@ socket.on(
         fireballs =
             fireballs.filter(
                 fireball =>
-                    fireball.id !==
-                    data.id
+                    fireball.id !== data.id
             );
     }
 );
@@ -822,9 +750,7 @@ document.addEventListener(
             event.preventDefault();
         }
 
-        keys[
-            event.code
-        ] =
+        keys[event.code] =
             true;
 
         const me =
@@ -838,8 +764,7 @@ document.addEventListener(
         }
 
         if (
-            event.code ===
-            "Space" &&
+            event.code === "Space" &&
             !spaceHeld
         ) {
 
@@ -850,8 +775,7 @@ document.addEventListener(
         }
 
         if (
-            event.code ===
-            "KeyF" &&
+            event.code === "KeyF" &&
             !event.repeat
         ) {
 
@@ -859,8 +783,7 @@ document.addEventListener(
         }
 
         if (
-            event.code ===
-            "KeyG" &&
+            event.code === "KeyG" &&
             !event.repeat
         ) {
 
@@ -884,14 +807,11 @@ document.addEventListener(
             event.preventDefault();
         }
 
-        keys[
-            event.code
-        ] =
+        keys[event.code] =
             false;
 
         if (
-            event.code ===
-            "Space"
+            event.code === "Space"
         ) {
 
             const me =
@@ -999,8 +919,7 @@ function performDash() {
         direction;
 
     velocityX =
-        direction *
-        dashPower;
+        direction * dashPower;
 }
 
 // =====================================================
@@ -1101,8 +1020,7 @@ function normalShove() {
             socket.emit(
                 "knockbackPlayer",
                 {
-                    targetId:
-                        id,
+                    targetId: id,
 
                     velocityX:
                         (
@@ -1112,8 +1030,7 @@ function normalShove() {
                         ) *
                         NORMAL_KNOCKBACK,
 
-                    velocityY:
-                        -4
+                    velocityY: -4
                 }
             );
         }
@@ -1148,22 +1065,15 @@ function performMeleeAttack() {
     lastMeleeTime =
         Date.now();
 
-    meleeSwings[
-        myId
-    ] = {
-
-        start:
-            Date.now(),
-
-        facing:
-            facing
+    meleeSwings[myId] = {
+        start: Date.now(),
+        facing: facing
     };
 
     socket.emit(
         "meleeSwing",
         {
-            facing:
-                facing
+            facing: facing
         }
     );
 
@@ -1268,11 +1178,9 @@ function shootNormalFireball() {
             "-" +
             Math.random(),
 
-        ownerId:
-            myId,
+        ownerId: myId,
 
-        type:
-            "normal",
+        type: "normal",
 
         x:
             me.x +
@@ -1286,11 +1194,9 @@ function shootNormalFireball() {
             facing *
             FIREBALL_SPEED,
 
-        velocityY:
-            0,
+        velocityY: 0,
 
-        radius:
-            10
+        radius: 10
     };
 
     fireballs.push(
@@ -1341,8 +1247,7 @@ function shootGreenFireball() {
     let velocityY = 0;
 
     if (
-        Math.random() <
-        0.25
+        Math.random() < 0.25
     ) {
 
         let nearestPlayer = null;
@@ -1434,11 +1339,9 @@ function shootGreenFireball() {
             "-" +
             Math.random(),
 
-        ownerId:
-            myId,
+        ownerId: myId,
 
-        type:
-            "green",
+        type: "green",
 
         x:
             me.x +
@@ -1454,8 +1357,7 @@ function shootGreenFireball() {
         velocityY:
             velocityY,
 
-        radius:
-            11
+        radius: 11
     };
 
     fireballs.push(
@@ -1502,15 +1404,13 @@ function updateFireballs() {
         ) {
 
             if (
-                fireball.ownerId ===
-                myId
+                fireball.ownerId === myId
             ) {
 
                 socket.emit(
                     "removeFireball",
                     {
-                        id:
-                            fireball.id
+                        id: fireball.id
                     }
                 );
             }
@@ -1524,8 +1424,7 @@ function updateFireballs() {
         }
 
         if (
-            fireball.ownerId !==
-            myId
+            fireball.ownerId !== myId
         ) {
             continue;
         }
@@ -1535,8 +1434,7 @@ function updateFireballs() {
         ) {
 
             if (
-                id ===
-                fireball.ownerId
+                id === fireball.ownerId
             ) {
                 continue;
             }
@@ -1585,12 +1483,10 @@ function updateFireballs() {
                     socket.emit(
                         "greenFireballHit",
                         {
-                            targetId:
-                                id,
+                            targetId: id,
 
                             direction:
-                                fireball.velocityX <
-                                0
+                                fireball.velocityX < 0
                                     ? -1
                                     : 1
                         }
@@ -1601,28 +1497,24 @@ function updateFireballs() {
                     socket.emit(
                         "fireballHit",
                         {
-                            targetId:
-                                id
+                            targetId: id
                         }
                     );
 
                     socket.emit(
                         "knockbackPlayer",
                         {
-                            targetId:
-                                id,
+                            targetId: id,
 
                             velocityX:
                                 (
-                                    fireball.velocityX >=
-                                    0
+                                    fireball.velocityX >= 0
                                         ? 1
                                         : -1
                                 ) *
                                 FIREBALL_KNOCKBACK,
 
-                            velocityY:
-                                -10
+                            velocityY: -10
                         }
                     );
                 }
@@ -1630,8 +1522,7 @@ function updateFireballs() {
                 socket.emit(
                     "removeFireball",
                     {
-                        id:
-                            fireball.id
+                        id: fireball.id
                     }
                 );
 
@@ -1698,9 +1589,8 @@ function updatePowerupPickup() {
         ) {
 
             const lastAttempt =
-                powerupPickupAttempts[
-                    id
-                ] || 0;
+                powerupPickupAttempts[id] ||
+                0;
 
             if (
                 Date.now() -
@@ -1708,9 +1598,7 @@ function updatePowerupPickup() {
                 500
             ) {
 
-                powerupPickupAttempts[
-                    id
-                ] =
+                powerupPickupAttempts[id] =
                     Date.now();
 
                 socket.emit(
@@ -1767,20 +1655,17 @@ function updatePlayer() {
 
     } else {
 
-        velocityX *=
-            0.8;
+        velocityX *= 0.8;
 
         if (
-            Math.abs(
-                velocityX
-            ) < 0.1
+            Math.abs(velocityX) < 0.1
         ) {
 
             velocityX = 0;
         }
     }
 
-    // HOLD W / UP TO AUTO-JUMP
+    // HOLD W / UP = CONTINUOUS AUTO-JUMP
     if (
         jumpHeld() &&
         onGround
@@ -1789,8 +1674,7 @@ function updatePlayer() {
         velocityY =
             -JUMP_POWER;
 
-        onGround =
-            false;
+        onGround = false;
     }
 
     me.x +=
@@ -1870,8 +1754,7 @@ function updatePlayer() {
 
     if (
         me.y >
-        canvas.height +
-        100
+        canvas.height + 100
     ) {
 
         me.x =
@@ -1879,13 +1762,11 @@ function updatePlayer() {
             Math.random() *
             Math.min(
                 300,
-                canvas.width -
-                200
+                canvas.width - 200
             );
 
         me.y =
-            canvas.height -
-            100;
+            canvas.height - 100;
 
         velocityX = 0;
         velocityY = 0;
@@ -1897,14 +1778,9 @@ function updatePlayer() {
     socket.emit(
         "playerMove",
         {
-            x:
-                me.x,
-
-            y:
-                me.y,
-
-            facing:
-                facing
+            x: me.x,
+            y: me.y,
+            facing: facing
         }
     );
 }
@@ -1915,17 +1791,31 @@ function updatePlayer() {
 
 function drawEye(player) {
 
+    const lookDirection =
+        player.facing === -1
+            ? -1
+            : 1;
+
     const eyeWidth = 5;
     const eyeHeight = 13;
 
-    const eyeX =
-        player.facing === -1
-            ? player.x + 4
+    let eyeX;
 
-            : player.x +
-              PLAYER_SIZE -
-              eyeWidth -
-              4;
+    if (
+        lookDirection === 1
+    ) {
+
+        eyeX =
+            player.x +
+            PLAYER_SIZE -
+            eyeWidth -
+            4;
+
+    } else {
+
+        eyeX =
+            player.x + 4;
+    }
 
     const eyeY =
         player.y + 7;
@@ -1968,8 +1858,7 @@ function drawHearts(
     for (
         let heart = 0;
 
-        heart <
-        totalHearts;
+        heart < totalHearts;
 
         heart++
     ) {
@@ -2059,11 +1948,8 @@ function drawSword(
         player.y +
         PLAYER_SIZE / 2;
 
-    const handleLength =
-        8;
-
-    const bladeLength =
-        38;
+    const handleLength = 8;
+    const bladeLength = 38;
 
     const handleEndX =
         handX +
@@ -2153,9 +2039,7 @@ function drawSword(
 // POWERUPS
 // =====================================================
 
-function drawPowerup(
-    powerup
-) {
+function drawPowerup(powerup) {
 
     ctx.beginPath();
 
@@ -2168,16 +2052,14 @@ function drawPowerup(
     );
 
     if (
-        powerup.type ===
-        "health"
+        powerup.type === "health"
     ) {
 
         ctx.fillStyle =
             "#ff3b30";
 
     } else if (
-        powerup.type ===
-        "dash"
+        powerup.type === "dash"
     ) {
 
         ctx.fillStyle =
@@ -2194,8 +2076,7 @@ function drawPowerup(
     ctx.strokeStyle =
         "#ffffff";
 
-    ctx.lineWidth =
-        2;
+    ctx.lineWidth = 2;
 
     ctx.stroke();
 
@@ -2209,12 +2090,10 @@ function drawPowerup(
         "center";
 
     ctx.fillText(
-        powerup.type ===
-        "health"
+        powerup.type === "health"
             ? "+"
 
-            : powerup.type ===
-              "dash"
+            : powerup.type === "dash"
                 ? "G"
                 : "F",
 
@@ -2227,109 +2106,8 @@ function drawPowerup(
 }
 
 // =====================================================
-// GOLD PLATFORM METER
-// =====================================================
-
-function drawGoldStatus() {
-
-    if (
-        goldControllerId !==
-        myId
-    ) {
-        return;
-    }
-
-    const width = 280;
-
-    const x =
-        canvas.width / 2 -
-        width / 2;
-
-    const y = 45;
-
-    ctx.fillStyle =
-        "rgba(0,0,0,0.82)";
-
-    ctx.fillRect(
-        x,
-        y,
-        width,
-        58
-    );
-
-    ctx.fillStyle =
-        "#ffd700";
-
-    ctx.font =
-        "bold 14px Arial";
-
-    ctx.textAlign =
-        "center";
-
-    ctx.fillText(
-        "GOLD PLATFORM CONTROL",
-        canvas.width / 2,
-        y + 18
-    );
-
-    ctx.fillStyle =
-        "#333333";
-
-    ctx.fillRect(
-        x + 15,
-        y + 27,
-        width - 30,
-        15
-    );
-
-    ctx.fillStyle =
-        "#ffd700";
-
-    ctx.fillRect(
-        x + 15,
-        y + 27,
-        (
-            width - 30
-        ) *
-        goldProgress,
-        15
-    );
-
-    ctx.strokeStyle =
-        "#ffffff";
-
-    ctx.lineWidth =
-        1;
-
-    ctx.strokeRect(
-        x + 15,
-        y + 27,
-        width - 30,
-        15
-    );
-
-    ctx.fillStyle =
-        "#ffffff";
-
-    ctx.font =
-        "11px Arial";
-
-    ctx.fillText(
-        goldRemaining.toFixed(
-            1
-        ) +
-        " seconds",
-
-        canvas.width / 2,
-        y + 54
-    );
-
-    ctx.textAlign =
-        "left";
-}
-
-// =====================================================
 // FIREBALL CHARGE METER
+// NOW ON TOP
 // =====================================================
 
 function drawFireballChargeMeter() {
@@ -2362,7 +2140,8 @@ function drawFireballChargeMeter() {
         canvas.width / 2 -
         width / 2;
 
-    const y = 115;
+    // SWAPPED: FIREBALL IS NOW TOP
+    const y = 45;
 
     ctx.fillStyle =
         "rgba(0,0,0,0.82)";
@@ -2420,8 +2199,7 @@ function drawFireballChargeMeter() {
     ctx.strokeStyle =
         "#ffffff";
 
-    ctx.lineWidth =
-        1;
+    ctx.lineWidth = 1;
 
     ctx.strokeRect(
         x + 15,
@@ -2441,8 +2219,107 @@ function drawFireballChargeMeter() {
             ? "Release SPACE to fire"
             : Math.round(
                 charge * 100
-            ) +
-            "%",
+            ) + "%",
+
+        canvas.width / 2,
+        y + 54
+    );
+
+    ctx.textAlign =
+        "left";
+}
+
+// =====================================================
+// GOLD PLATFORM METER
+// NOW UNDER FIREBALL
+// =====================================================
+
+function drawGoldStatus() {
+
+    if (
+        goldControllerId !== myId
+    ) {
+        return;
+    }
+
+    const width = 280;
+
+    const x =
+        canvas.width / 2 -
+        width / 2;
+
+    // SWAPPED: GOLD IS NOW BELOW FIREBALL
+    const y = 115;
+
+    ctx.fillStyle =
+        "rgba(0,0,0,0.82)";
+
+    ctx.fillRect(
+        x,
+        y,
+        width,
+        58
+    );
+
+    ctx.fillStyle =
+        "#ffd700";
+
+    ctx.font =
+        "bold 14px Arial";
+
+    ctx.textAlign =
+        "center";
+
+    ctx.fillText(
+        "GOLD PLATFORM CONTROL",
+        canvas.width / 2,
+        y + 18
+    );
+
+    ctx.fillStyle =
+        "#333333";
+
+    ctx.fillRect(
+        x + 15,
+        y + 27,
+        width - 30,
+        15
+    );
+
+    ctx.fillStyle =
+        "#ffd700";
+
+    ctx.fillRect(
+        x + 15,
+        y + 27,
+        (
+            width - 30
+        ) *
+        goldProgress,
+        15
+    );
+
+    ctx.strokeStyle =
+        "#ffffff";
+
+    ctx.lineWidth = 1;
+
+    ctx.strokeRect(
+        x + 15,
+        y + 27,
+        width - 30,
+        15
+    );
+
+    ctx.fillStyle =
+        "#ffffff";
+
+    ctx.font =
+        "11px Arial";
+
+    ctx.fillText(
+        goldRemaining.toFixed(1) +
+        " seconds",
 
         canvas.width / 2,
         y + 54
@@ -2456,9 +2333,7 @@ function drawFireballChargeMeter() {
 // POWERUP HUD
 // =====================================================
 
-function drawPowerupHud(
-    me
-) {
+function drawPowerupHud(me) {
 
     if (
         !me ||
@@ -2467,19 +2342,15 @@ function drawPowerupHud(
         return;
     }
 
-    const hudWidth =
-        250;
-
-    const hudHeight =
-        155;
+    const hudWidth = 250;
+    const hudHeight = 155;
 
     const hudX =
         canvas.width -
         hudWidth -
         12;
 
-    const hudY =
-        10;
+    const hudY = 10;
 
     ctx.fillStyle =
         "rgba(0,0,0,0.76)";
@@ -2503,7 +2374,6 @@ function drawPowerupHud(
         hudY + 21
     );
 
-    // HEALTH
     const bonusHearts =
         Math.max(
             0,
@@ -2531,7 +2401,7 @@ function drawPowerupHud(
         hudY + 45
     );
 
-    // DASH
+    // DASH COOLDOWN + DISTANCE
     ctx.fillStyle =
         "#4fd5ff";
 
@@ -2573,9 +2443,7 @@ function drawPowerupHud(
 
         ctx.fillText(
             "Dash distance: " +
-            getDashDistancePercent(
-                me
-            ) +
+            getDashDistancePercent(me) +
             "%",
 
             hudX + 15,
@@ -2599,7 +2467,7 @@ function drawPowerupHud(
         );
     }
 
-    // GREEN FIREBALL
+    // GREEN FIREBALL COOLDOWN
     ctx.fillStyle =
         "#32ff5a";
 
@@ -2649,7 +2517,6 @@ function drawPowerupHud(
         );
     }
 
-    // GOLD HELP
     ctx.fillStyle =
         "#ffd700";
 
@@ -2684,10 +2551,7 @@ function draw() {
         canvas.height
     );
 
-    // =================================================
     // PLATFORMS
-    // =================================================
-
     for (
         const platform
         of platforms
@@ -2720,8 +2584,7 @@ function draw() {
             ctx.strokeStyle =
                 "#fff4a3";
 
-            ctx.lineWidth =
-                3;
+            ctx.lineWidth = 3;
 
             ctx.strokeRect(
                 platform.x,
@@ -2732,10 +2595,7 @@ function draw() {
         }
     }
 
-    // =================================================
     // POWERUPS
-    // =================================================
-
     for (
         const id in powerups
     ) {
@@ -2745,10 +2605,7 @@ function draw() {
         );
     }
 
-    // =================================================
     // PLAYERS
-    // =================================================
-
     for (
         const id in players
     ) {
@@ -2776,9 +2633,7 @@ function draw() {
             PLAYER_SIZE
         );
 
-        drawEye(
-            player
-        );
+        drawEye(player);
 
         ctx.globalAlpha = 1;
 
@@ -2843,9 +2698,7 @@ function draw() {
 
             const elapsed =
                 Date.now() -
-                meleeSwings[
-                    id
-                ].start;
+                meleeSwings[id].start;
 
             if (
                 elapsed <=
@@ -2859,17 +2712,12 @@ function draw() {
 
             } else {
 
-                delete meleeSwings[
-                    id
-                ];
+                delete meleeSwings[id];
             }
         }
     }
 
-    // =================================================
     // FIREBALLS
-    // =================================================
-
     for (
         const fireball
         of fireballs
@@ -2886,8 +2734,7 @@ function draw() {
         );
 
         ctx.fillStyle =
-            fireball.type ===
-            "green"
+            fireball.type === "green"
                 ? "#00ff55"
                 : "#ff7b00";
 
@@ -2907,8 +2754,7 @@ function draw() {
         );
 
         ctx.fillStyle =
-            fireball.type ===
-            "green"
+            fireball.type === "green"
                 ? "#c8ff00"
                 : "#ffe600";
 
@@ -2918,10 +2764,7 @@ function draw() {
     const me =
         players[myId];
 
-    // =================================================
     // HEALTH HUD
-    // =================================================
-
     if (me) {
 
         const maxHealth =
@@ -2980,30 +2823,21 @@ function draw() {
         );
     }
 
-    // =================================================
-    // POWERUP HUD WITH COOLDOWNS
-    // =================================================
-
-    drawPowerupHud(
-        me
-    );
+    // POWERUP HUD + COOLDOWNS
+    drawPowerupHud(me);
 
     // =================================================
-    // GOLD PLATFORM METER
-    // =================================================
-
-    drawGoldStatus();
-
-    // =================================================
-    // FIREBALL CHARGE METER
+    // CENTER METERS
+    //
+    // FIREBALL = TOP
+    // GOLD = BELOW
     // =================================================
 
     drawFireballChargeMeter();
 
-    // =================================================
-    // GOLD REWARD MESSAGE
-    // =================================================
+    drawGoldStatus();
 
+    // GOLD REWARD MESSAGE
     if (
         Date.now() <
         goldRewardMessageUntil
@@ -3013,10 +2847,8 @@ function draw() {
             "rgba(0,0,0,0.85)";
 
         ctx.fillRect(
-            canvas.width / 2 -
-            190,
-            canvas.height / 2 -
-            40,
+            canvas.width / 2 - 190,
+            canvas.height / 2 - 40,
             380,
             80
         );
@@ -3040,10 +2872,7 @@ function draw() {
             "left";
     }
 
-    // =================================================
     // MAP CHANGE MESSAGE
-    // =================================================
-
     if (
         Date.now() <
         mapChangeMessageUntil
@@ -3053,10 +2882,8 @@ function draw() {
             "rgba(0,0,0,0.82)";
 
         ctx.fillRect(
-            canvas.width / 2 -
-            190,
-            canvas.height / 2 -
-            40,
+            canvas.width / 2 - 190,
+            canvas.height / 2 - 40,
             380,
             80
         );
@@ -3083,10 +2910,7 @@ function draw() {
             "left";
     }
 
-    // =================================================
     // PLATFORM CHANGE MESSAGE
-    // =================================================
-
     if (
         Date.now() <
         platformMessageUntil
@@ -3096,10 +2920,8 @@ function draw() {
             "rgba(0,0,0,0.8)";
 
         ctx.fillRect(
-            canvas.width / 2 -
-            150,
-            canvas.height / 2 -
-            30,
+            canvas.width / 2 - 150,
+            canvas.height / 2 - 30,
             300,
             60
         );
@@ -3123,10 +2945,7 @@ function draw() {
             "left";
     }
 
-    // =================================================
     // DEATH SCREEN
-    // =================================================
-
     if (
         me &&
         me.dead
@@ -3154,8 +2973,7 @@ function draw() {
         ctx.fillText(
             "YOU DIED",
             canvas.width / 2,
-            canvas.height / 2 -
-            70
+            canvas.height / 2 - 70
         );
 
         ctx.fillStyle =
@@ -3167,13 +2985,11 @@ function draw() {
         ctx.fillText(
             "You lost all powerups.",
             canvas.width / 2,
-            canvas.height / 2 -
-            35
+            canvas.height / 2 - 35
         );
 
         const allowedAt =
-            me.respawnAllowedAt ||
-            0;
+            me.respawnAllowedAt || 0;
 
         const remainingMs =
             Math.max(
@@ -3184,8 +3000,7 @@ function draw() {
 
         const remainingSeconds =
             Math.ceil(
-                remainingMs /
-                1000
+                remainingMs / 1000
             );
 
         respawnButton = {
@@ -3197,11 +3012,9 @@ function draw() {
             y:
                 canvas.height / 2,
 
-            width:
-                210,
+            width: 210,
 
-            height:
-                58,
+            height: 58,
 
             enabled:
                 remainingMs <= 0
@@ -3230,14 +3043,12 @@ function draw() {
         ctx.fillText(
             respawnButton.enabled
                 ? "RESPAWN"
-
                 : "RESPAWN IN " +
                   remainingSeconds,
 
             canvas.width / 2,
 
-            respawnButton.y +
-            36
+            respawnButton.y + 36
         );
 
         ctx.font =
@@ -3251,8 +3062,7 @@ function draw() {
 
             canvas.width / 2,
 
-            respawnButton.y +
-            88
+            respawnButton.y + 88
         );
 
         ctx.textAlign =
@@ -3260,8 +3070,7 @@ function draw() {
 
     } else {
 
-        respawnButton =
-            null;
+        respawnButton = null;
     }
 }
 
@@ -3309,19 +3118,14 @@ canvas.addEventListener(
             );
 
         if (
-            mouseX >=
-            respawnButton.x &&
-
+            mouseX >= respawnButton.x &&
             mouseX <=
-            respawnButton.x +
-            respawnButton.width &&
-
-            mouseY >=
-            respawnButton.y &&
-
+                respawnButton.x +
+                respawnButton.width &&
+            mouseY >= respawnButton.y &&
             mouseY <=
-            respawnButton.y +
-            respawnButton.height
+                respawnButton.y +
+                respawnButton.height
         ) {
 
             socket.emit(
