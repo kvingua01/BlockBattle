@@ -13,7 +13,11 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-const MAX_HEALTH = 20; // 20 half-hearts = 10 full hearts
+const MAX_HEALTH = 20;
+// We use 20 health points because:
+// 2 points = 1 full heart
+// 1 point = 1/2 heart
+
 const players = {};
 
 function createPlayer() {
@@ -25,8 +29,12 @@ function createPlayer() {
             Math.floor(Math.random() * 16777215)
                 .toString(16)
                 .padStart(6, "0"),
+
         health: MAX_HEALTH,
         dead: false,
+
+        // Counts successful melee hits.
+        // Resets after 5.
         meleeHits: 0
     };
 }
@@ -36,12 +44,18 @@ io.on("connection", (socket) => {
 
     players[socket.id] = createPlayer();
 
+    // Send all current players to the new player.
     socket.emit("currentPlayers", players);
 
+    // Tell everyone else about the new player.
     socket.broadcast.emit("newPlayer", {
         id: socket.id,
         ...players[socket.id]
     });
+
+    // -------------------------
+    // MOVEMENT
+    // -------------------------
 
     socket.on("playerMove", (data) => {
         const player = players[socket.id];
@@ -53,10 +67,14 @@ io.on("connection", (socket) => {
 
         socket.broadcast.emit("playerMoved", {
             id: socket.id,
-            x: data.x,
-            y: data.y
+            x: player.x,
+            y: player.y
         });
     });
+
+    // -------------------------
+    // NORMAL SHOVE
+    // -------------------------
 
     socket.on("knockbackPlayer", (data) => {
         if (!data || !data.targetId) return;
@@ -73,7 +91,23 @@ io.on("connection", (socket) => {
         });
     });
 
-    // FIREBALL = 1 FULL HEART = 2 HALF-HEART POINTS
+    // -------------------------
+    // FIREBALL
+    // -------------------------
+
+    socket.on("shootFireball", (fireball) => {
+        const player = players[socket.id];
+
+        if (!player || player.dead) return;
+
+        socket.broadcast.emit("spawnFireball", fireball);
+    });
+
+    socket.on("removeFireball", (data) => {
+        socket.broadcast.emit("removeFireball", data);
+    });
+
+    // Fireball does ONE FULL HEART.
     socket.on("fireballHit", (data) => {
         if (!data || !data.targetId) return;
 
@@ -97,7 +131,10 @@ io.on("connection", (socket) => {
         });
     });
 
-    // F MELEE ATTACK
+    // -------------------------
+    // MELEE ATTACK
+    // -------------------------
+
     socket.on("meleeHit", (data) => {
         if (!data || !data.targetId) return;
 
@@ -107,10 +144,19 @@ io.on("connection", (socket) => {
         if (!attacker || attacker.dead) return;
         if (!target || target.dead) return;
 
+        // Every successful melee hit counts.
         attacker.meleeHits += 1;
 
-        // Every fifth successful melee hit does half a heart.
-        if (attacker.meleeHits % 5 === 0) {
+        // Small shove on every melee hit.
+        io.to(data.targetId).emit("receiveKnockback", {
+            velocityX: data.velocityX,
+            velocityY: -2
+        });
+
+        // Every fifth hit removes HALF A HEART.
+        if (attacker.meleeHits >= 5) {
+            attacker.meleeHits = 0;
+
             target.health -= 1;
 
             if (target.health <= 0) {
@@ -125,16 +171,15 @@ io.on("connection", (socket) => {
             });
         }
 
+        // Update attacker's 0/5 melee meter.
         io.to(socket.id).emit("meleeCountChanged", {
             count: attacker.meleeHits
         });
-
-        // Small knockback on every melee hit.
-        io.to(data.targetId).emit("receiveKnockback", {
-            velocityX: data.velocityX,
-            velocityY: -2
-        });
     });
+
+    // -------------------------
+    // RESPAWN
+    // -------------------------
 
     socket.on("respawnPlayer", () => {
         const player = players[socket.id];
@@ -143,6 +188,7 @@ io.on("connection", (socket) => {
 
         player.x = 100 + Math.random() * 300;
         player.y = 500;
+
         player.health = MAX_HEALTH;
         player.dead = false;
         player.meleeHits = 0;
@@ -156,17 +202,9 @@ io.on("connection", (socket) => {
         });
     });
 
-    socket.on("shootFireball", (fireball) => {
-        const player = players[socket.id];
-
-        if (!player || player.dead) return;
-
-        socket.broadcast.emit("spawnFireball", fireball);
-    });
-
-    socket.on("removeFireball", (data) => {
-        socket.broadcast.emit("removeFireball", data);
-    });
+    // -------------------------
+    // DISCONNECT
+    // -------------------------
 
     socket.on("disconnect", () => {
         console.log("Player disconnected:", socket.id);
