@@ -1,39 +1,92 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <title>BlockBattle</title>
+
+    <meta charset="UTF-8">
+
+    <title>
+        BlockBattle
+    </title>
 
     <style>
+
         body {
             margin: 0;
-            background: #222;
+            background: #15131d;
             color: white;
-            font-family: Arial;
+            font-family: Arial, sans-serif;
             text-align: center;
+            overflow-x: hidden;
         }
 
         h1 {
             margin-bottom: 5px;
         }
 
-        canvas {
-            background: #87CEEB;
-            border: 4px solid white;
-            margin-top: 10px;
+        p {
+            margin: 6px;
         }
+
+        canvas {
+            display: block;
+            margin: 15px auto 20px auto;
+
+            background: #11111b;
+
+            border: 4px solid white;
+
+            max-width: 95vw;
+
+            max-height: 78vh;
+
+            width: auto;
+
+            height: auto;
+        }
+
     </style>
+
 </head>
 
 <body>
 
-<h1>BLOCK BATTLE</h1>
+    <h1>
+        BLOCK BATTLE
+    </h1>
 
-<p>A/D = Move | SPACE = Jump</p>
+    <p>
+        A/D or ←/→ = Move
+        |
+        W or ↑ = Jump
+        |
+        F = Sword / Green Fireball
+        |
+        G = Dash
+    </p>
 
-<canvas id="gameCanvas" width="800" height="600"></canvas>
+    <p>
+        SPACE = Shove
+        |
+        Hold SPACE = Fireball
+        |
+        Powerups heal you to full
+    </p>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="game.js"></script>
+    <p>
+        6+ Players = Large Map
+    </p>
+
+    <canvas
+        id="gameCanvas"
+        width="800"
+        height="600">
+    </canvas>
+
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script src="game.js"></script>
 
 </body>
+
 </html>
