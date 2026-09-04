@@ -19,10 +19,19 @@ app.get("/", (req, res) => {
 
 const PLAYER_SIZE = 30;
 
-const BASE_MAX_HEALTH = 20;     // 10 hearts
-const ABSOLUTE_MAX_HEALTH = 40; // 20 hearts
+const BASE_MAX_HEALTH = 20;
+const ABSOLUTE_MAX_HEALTH = 40;
 
-const PLATFORM_CHANGE_TIME = 10 * 60 * 1000;
+const NORMAL_MAP_WIDTH = 800;
+const NORMAL_MAP_HEIGHT = 600;
+
+const LARGE_MAP_WIDTH = 1600;
+const LARGE_MAP_HEIGHT = 1200;
+
+const LARGE_MAP_PLAYER_COUNT = 6;
+
+const PLATFORM_CHANGE_TIME =
+    10 * 60 * 1000;
 
 const POWERUP_TYPES = [
     "health",
@@ -31,71 +40,113 @@ const POWERUP_TYPES = [
 ];
 
 // =====================================================
-// PLAYERS
+// GAME STATE
 // =====================================================
 
 const players = {};
-
-// =====================================================
-// POWERUPS
-// =====================================================
 
 const powerups = {};
 
 let powerupCounter = 0;
 
-// =====================================================
-// PLATFORMS
-// =====================================================
+let mapWidth =
+    NORMAL_MAP_WIDTH;
+
+let mapHeight =
+    NORMAL_MAP_HEIGHT;
 
 let platforms = [];
 
-function clamp(value, minimum, maximum) {
+// =====================================================
+// HELPERS
+// =====================================================
+
+function clamp(
+    value,
+    minimum,
+    maximum
+) {
+
     return Math.max(
         minimum,
-        Math.min(maximum, value)
+        Math.min(
+            maximum,
+            value
+        )
     );
 }
+
+function getPlayerCount() {
+
+    return Object.keys(
+        players
+    ).length;
+}
+
+function shouldUseLargeMap() {
+
+    return (
+        getPlayerCount() >=
+        LARGE_MAP_PLAYER_COUNT
+    );
+}
+
+// =====================================================
+// PLATFORM GENERATION
+// =====================================================
 
 function generatePlatforms() {
 
     const newPlatforms = [];
 
-    // Ground
+    // Bottom floor
     newPlatforms.push({
         x: 0,
-        y: 570,
-        width: 800,
+        y: mapHeight - 30,
+        width: mapWidth,
         height: 30
     });
 
-    // These heights guarantee a climbable path.
-    const heights = [
-        490,
-        410,
-        330,
-        250,
-        170,
-        90,
-        30
-    ];
+    const platformWidth =
+        mapWidth > NORMAL_MAP_WIDTH
+            ? 230
+            : 170;
+
+    const topPlatformWidth =
+        mapWidth > NORMAL_MAP_WIDTH
+            ? 280
+            : 220;
+
+    const verticalGap = 80;
+
+    let y =
+        mapHeight - 110;
 
     let previousX =
-        80 + Math.random() * 450;
+        80 +
+        Math.random() *
+        Math.max(
+            100,
+            mapWidth -
+            platformWidth -
+            160
+        );
 
-    for (
-        let i = 0;
-        i < heights.length;
-        i++
+    while (
+        y > 40
     ) {
 
-        const width =
-            i === heights.length - 1
-                ? 220
-                : 170;
+        const horizontalRange =
+            mapWidth >
+            NORMAL_MAP_WIDTH
+                ? 180
+                : 120;
 
         const horizontalChange =
-            -120 + Math.random() * 240;
+            -horizontalRange +
+            Math.random() *
+            horizontalRange *
+            2;
 
         let newX =
             previousX +
@@ -104,36 +155,102 @@ function generatePlatforms() {
         newX = clamp(
             newX,
             20,
-            800 - width - 20
+            mapWidth -
+            platformWidth -
+            20
         );
 
         newPlatforms.push({
-            x: Math.round(newX),
-            y: heights[i],
-            width: width,
-            height: 20
+            x:
+                Math.round(
+                    newX
+                ),
+
+            y:
+                Math.round(
+                    y
+                ),
+
+            width:
+                platformWidth,
+
+            height:
+                20
         });
 
-        previousX = newX;
+        previousX =
+            newX;
+
+        y -=
+            verticalGap;
+    }
+
+    // Make the highest platform wider.
+    if (
+        newPlatforms.length >
+        1
+    ) {
+
+        const topPlatform =
+            newPlatforms[
+                newPlatforms.length -
+                1
+            ];
+
+        topPlatform.width =
+            topPlatformWidth;
+
+        topPlatform.x =
+            clamp(
+                topPlatform.x,
+                20,
+                mapWidth -
+                topPlatformWidth -
+                20
+            );
     }
 
     return newPlatforms;
 }
 
-platforms = generatePlatforms();
+platforms =
+    generatePlatforms();
 
 // =====================================================
-// CREATE PLAYER
+// SPAWN POSITION
 // =====================================================
 
-function createPlayer() {
+function getSpawnPosition() {
 
     return {
         x:
             100 +
-            Math.random() * 300,
+            Math.random() *
+            Math.min(
+                300,
+                mapWidth - 200
+            ),
 
-        y: 500,
+        y:
+            mapHeight - 100
+    };
+}
+
+// =====================================================
+// PLAYER CREATION
+// =====================================================
+
+function createPlayer() {
+
+    const spawn =
+        getSpawnPosition();
+
+    return {
+        x:
+            spawn.x,
+
+        y:
+            spawn.y,
 
         color:
             "#" +
@@ -150,23 +267,30 @@ function createPlayer() {
         maxHealth:
             BASE_MAX_HEALTH,
 
-        dead: false,
+        dead:
+            false,
 
-        facing: 1,
+        facing:
+            1,
 
-        dashLevel: 0,
+        dashLevel:
+            0,
 
-        greenLevel: 0,
+        greenLevel:
+            0,
 
-        respawnAllowedAt: 0
+        respawnAllowedAt:
+            0
     };
 }
 
 // =====================================================
-// POWERUP CREATION
+// POWERUPS
 // =====================================================
 
-function createRandomPowerup(player) {
+function createRandomPowerup(
+    player
+) {
 
     const type =
         POWERUP_TYPES[
@@ -185,22 +309,27 @@ function createRandomPowerup(player) {
         powerupCounter;
 
     const powerup = {
-        id: id,
-        type: type,
+        id:
+            id,
 
-        x: clamp(
-            player.x +
-                PLAYER_SIZE / 2,
-            20,
-            780
-        ),
+        type:
+            type,
 
-        y: clamp(
-            player.y +
+        x:
+            clamp(
+                player.x +
                 PLAYER_SIZE / 2,
-            40,
-            550
-        )
+                20,
+                mapWidth - 20
+            ),
+
+        y:
+            clamp(
+                player.y +
+                PLAYER_SIZE / 2,
+                40,
+                mapHeight - 50
+            )
     };
 
     powerups[id] =
@@ -214,14 +343,17 @@ function createRandomPowerup(player) {
     return powerup;
 }
 
-// =====================================================
-// MOVE EXISTING POWERUPS WHEN MAP CHANGES
-// =====================================================
-
 function repositionPowerups() {
 
     const usablePlatforms =
         platforms.slice(1);
+
+    if (
+        usablePlatforms.length ===
+        0
+    ) {
+        return;
+    }
 
     for (
         const id in powerups
@@ -242,10 +374,10 @@ function repositionPowerups() {
             platform.x +
             20 +
             Math.random() *
-                Math.max(
-                    1,
-                    platform.width - 40
-                );
+            Math.max(
+                1,
+                platform.width - 40
+            );
 
         powerup.y =
             platform.y - 15;
@@ -253,10 +385,116 @@ function repositionPowerups() {
 }
 
 // =====================================================
+// MAP SIZE CHANGES
+// =====================================================
+
+function updateMapSize() {
+
+    const useLargeMap =
+        shouldUseLargeMap();
+
+    const newWidth =
+        useLargeMap
+            ? LARGE_MAP_WIDTH
+            : NORMAL_MAP_WIDTH;
+
+    const newHeight =
+        useLargeMap
+            ? LARGE_MAP_HEIGHT
+            : NORMAL_MAP_HEIGHT;
+
+    if (
+        newWidth === mapWidth &&
+        newHeight === mapHeight
+    ) {
+        return;
+    }
+
+    mapWidth =
+        newWidth;
+
+    mapHeight =
+        newHeight;
+
+    platforms =
+        generatePlatforms();
+
+    repositionPowerups();
+
+    const newPositions = {};
+
+    for (
+        const id in players
+    ) {
+
+        const player =
+            players[id];
+
+        if (
+            !player ||
+            player.dead
+        ) {
+            continue;
+        }
+
+        const spawn =
+            getSpawnPosition();
+
+        player.x =
+            spawn.x;
+
+        player.y =
+            spawn.y;
+
+        newPositions[id] = {
+            x:
+                player.x,
+
+            y:
+                player.y,
+
+            facing:
+                player.facing
+        };
+    }
+
+    io.emit(
+        "mapChanged",
+        {
+            width:
+                mapWidth,
+
+            height:
+                mapHeight,
+
+            platforms:
+                platforms,
+
+            powerups:
+                powerups,
+
+            playerPositions:
+                newPositions,
+
+            largeMap:
+                useLargeMap
+        }
+    );
+
+    console.log(
+        useLargeMap
+            ? "Map expanded to 1600x1200"
+            : "Map shrank to 800x600"
+    );
+}
+
+// =====================================================
 // PLAYER DEATH
 // =====================================================
 
-function killPlayer(playerId) {
+function killPlayer(
+    playerId
+) {
 
     const player =
         players[playerId];
@@ -269,26 +507,34 @@ function killPlayer(playerId) {
     }
 
     player.health = 0;
-    player.dead = true;
 
-    // Lose ALL powerups/upgrades.
+    player.dead =
+        true;
+
+    // Lose all powerups/upgrades.
     player.maxHealth =
         BASE_MAX_HEALTH;
 
-    player.dashLevel = 0;
+    player.dashLevel =
+        0;
 
-    player.greenLevel = 0;
+    player.greenLevel =
+        0;
 
     player.respawnAllowedAt =
-        Date.now() + 5000;
+        Date.now() +
+        5000;
 
-    // Drop exactly ONE random powerup.
-    createRandomPowerup(player);
+    // Drop one random powerup.
+    createRandomPowerup(
+        player
+    );
 
     io.emit(
         "playerHealthChanged",
         {
-            id: playerId,
+            id:
+                playerId,
 
             health:
                 player.health,
@@ -296,7 +542,8 @@ function killPlayer(playerId) {
             maxHealth:
                 player.maxHealth,
 
-            dead: true,
+            dead:
+                true,
 
             respawnAllowedAt:
                 player.respawnAllowedAt
@@ -306,7 +553,8 @@ function killPlayer(playerId) {
     io.emit(
         "playerPowerupChanged",
         {
-            id: playerId,
+            id:
+                playerId,
 
             health:
                 player.health,
@@ -368,9 +616,11 @@ function damagePlayer(
             maxHealth:
                 target.maxHealth,
 
-            dead: false,
+            dead:
+                false,
 
-            respawnAllowedAt: 0
+            respawnAllowedAt:
+                0
         }
     );
 
@@ -387,8 +637,6 @@ setInterval(
         platforms =
             generatePlatforms();
 
-        // Powerups stay forever,
-        // but move onto the new reachable platforms.
         repositionPowerups();
 
         io.emit(
@@ -410,7 +658,7 @@ setInterval(
 );
 
 // =====================================================
-// CONNECTION
+// SOCKET CONNECTION
 // =====================================================
 
 io.on(
@@ -425,9 +673,25 @@ io.on(
         players[socket.id] =
             createPlayer();
 
+        // Check whether this player
+        // caused the map to become large.
+        updateMapSize();
+
         socket.emit(
-            "platformLayout",
-            platforms
+            "mapState",
+            {
+                width:
+                    mapWidth,
+
+                height:
+                    mapHeight,
+
+                platforms:
+                    platforms,
+
+                largeMap:
+                    shouldUseLargeMap()
+            }
         );
 
         socket.emit(
@@ -461,7 +725,9 @@ io.on(
             (data) => {
 
                 const player =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 if (
                     !player ||
@@ -471,7 +737,12 @@ io.on(
                 }
 
                 player.x =
-                    data.x;
+                    clamp(
+                        data.x,
+                        0,
+                        mapWidth -
+                        PLAYER_SIZE
+                    );
 
                 player.y =
                     data.y;
@@ -520,7 +791,9 @@ io.on(
                 }
 
                 const attacker =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 const target =
                     players[
@@ -565,7 +838,9 @@ io.on(
             (fireball) => {
 
                 const player =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 if (
                     !player ||
@@ -604,7 +879,9 @@ io.on(
                 }
 
                 const attacker =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 const target =
                     players[
@@ -625,7 +902,6 @@ io.on(
                     return;
                 }
 
-                // Normal fireball = 1 heart
                 damagePlayer(
                     data.targetId,
                     2
@@ -642,7 +918,9 @@ io.on(
             (fireball) => {
 
                 const player =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 if (
                     !player ||
@@ -671,7 +949,9 @@ io.on(
                 }
 
                 const attacker =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 const target =
                     players[
@@ -693,13 +973,11 @@ io.on(
                     return;
                 }
 
-                // Green fireball = HALF heart
                 damagePlayer(
                     data.targetId,
                     1
                 );
 
-                // Double normal knockback.
                 const direction =
                     data.direction === -1
                         ? -1
@@ -711,7 +989,8 @@ io.on(
                     "receiveKnockback",
                     {
                         velocityX:
-                            direction * 60,
+                            direction *
+                            60,
 
                         velocityY:
                             -20
@@ -729,17 +1008,13 @@ io.on(
             (data) => {
 
                 const player =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 if (
                     !player ||
-                    player.dead
-                ) {
-                    return;
-                }
-
-                // Green fireball perk replaces sword.
-                if (
+                    player.dead ||
                     player.greenLevel > 0
                 ) {
                     return;
@@ -779,7 +1054,9 @@ io.on(
                 }
 
                 const attacker =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 const target =
                     players[
@@ -801,7 +1078,6 @@ io.on(
                     return;
                 }
 
-                // Sword = half heart.
                 damagePlayer(
                     data.targetId,
                     1
@@ -831,7 +1107,9 @@ io.on(
             (powerupId) => {
 
                 const player =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 const powerup =
                     powerups[
@@ -868,16 +1146,11 @@ io.on(
                         dy * dy
                     );
 
-                // Make sure the player is actually close.
                 if (
                     distance > 55
                 ) {
                     return;
                 }
-
-                // -----------------------------------------
-                // HEALTH POWERUP
-                // -----------------------------------------
 
                 if (
                     powerup.type ===
@@ -887,15 +1160,10 @@ io.on(
                     player.maxHealth =
                         Math.min(
                             ABSOLUTE_MAX_HEALTH,
-
                             player.maxHealth +
-                                4
+                            4
                         );
                 }
-
-                // -----------------------------------------
-                // DASH POWERUP
-                // -----------------------------------------
 
                 if (
                     powerup.type ===
@@ -905,10 +1173,6 @@ io.on(
                     player.dashLevel++;
                 }
 
-                // -----------------------------------------
-                // GREEN FIREBALL POWERUP
-                // -----------------------------------------
-
                 if (
                     powerup.type ===
                     "greenFireball"
@@ -917,7 +1181,7 @@ io.on(
                     player.greenLevel++;
                 }
 
-                // EVERY powerup heals to max.
+                // Every powerup heals to max.
                 player.health =
                     player.maxHealth;
 
@@ -962,7 +1226,8 @@ io.on(
                         maxHealth:
                             player.maxHealth,
 
-                        dead: false,
+                        dead:
+                            false,
 
                         respawnAllowedAt:
                             0
@@ -980,7 +1245,9 @@ io.on(
             () => {
 
                 const player =
-                    players[socket.id];
+                    players[
+                        socket.id
+                    ];
 
                 if (
                     !player ||
@@ -989,7 +1256,6 @@ io.on(
                     return;
                 }
 
-                // Must wait 5 seconds.
                 if (
                     Date.now() <
                     player.respawnAllowedAt
@@ -997,12 +1263,14 @@ io.on(
                     return;
                 }
 
+                const spawn =
+                    getSpawnPosition();
+
                 player.x =
-                    100 +
-                    Math.random() * 300;
+                    spawn.x;
 
                 player.y =
-                    500;
+                    spawn.y;
 
                 player.health =
                     BASE_MAX_HEALTH;
@@ -1043,14 +1311,17 @@ io.on(
                         maxHealth:
                             player.maxHealth,
 
-                        dead: false,
+                        dead:
+                            false,
 
                         facing:
                             player.facing,
 
-                        dashLevel: 0,
+                        dashLevel:
+                            0,
 
-                        greenLevel: 0,
+                        greenLevel:
+                            0,
 
                         respawnAllowedAt:
                             0
@@ -1080,6 +1351,10 @@ io.on(
                     "playerDisconnected",
                     socket.id
                 );
+
+                // If we dropped from 6 players
+                // back to 5, shrink the map.
+                updateMapSize();
             }
         );
     }
@@ -1090,7 +1365,8 @@ io.on(
 // =====================================================
 
 const PORT =
-    process.env.PORT || 3000;
+    process.env.PORT ||
+    3000;
 
 server.listen(
     PORT,
@@ -1098,20 +1374,26 @@ server.listen(
     () => {
 
         console.log("");
+
         console.log(
             "=============================="
         );
+
         console.log(
             "   BLOCK BATTLE IS RUNNING!"
         );
+
         console.log(
             "=============================="
         );
+
         console.log("");
+
         console.log(
             "Server running on port " +
             PORT
         );
+
         console.log("");
     }
 );
