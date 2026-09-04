@@ -49,6 +49,9 @@ const LARGE_MAP_PLAYER_COUNT = 6;
 const PLATFORM_CHANGE_TIME =
     10 * 60 * 1000;
 
+const GOLD_PLATFORM_TIME =
+    30 * 1000;
+
 const POWERUP_TYPES = [
     "health",
     "dash",
@@ -71,6 +74,9 @@ let mapHeight =
     NORMAL_MAP_HEIGHT;
 
 let platforms = [];
+
+let goldControllerId = null;
+let goldControlStartedAt = 0;
 
 // =====================================================
 // HELPERS
@@ -114,35 +120,38 @@ function shouldUseLargeMap() {
     );
 }
 
+function randomPowerupType() {
+
+    return POWERUP_TYPES[
+        Math.floor(
+            Math.random() *
+            POWERUP_TYPES.length
+        )
+    ];
+}
+
+// =====================================================
+// GOLD PLATFORM RESET
+// =====================================================
+
+function resetGoldControl() {
+
+    goldControllerId = null;
+
+    goldControlStartedAt = 0;
+
+    io.emit(
+        "goldPlatformStatus",
+        {
+            controllerId: null,
+            progress: 0,
+            remaining: 30
+        }
+    );
+}
+
 // =====================================================
 // PLATFORM GENERATION
-// =====================================================
-//
-// NEW SPACING SYSTEM
-//
-// NORMAL MAP:
-//
-// Platforms are separated into:
-// LEFT
-// CENTER
-// RIGHT
-//
-// Each vertical row is around 80px apart.
-//
-// NO extra platforms are squeezed between rows.
-//
-// Random row styles:
-// LEFT + RIGHT
-// LEFT + CENTER
-// CENTER + RIGHT
-//
-// This keeps the map spread out without
-// using one exact fixed layout.
-//
-// LARGE MAP:
-//
-// Uses LEFT / CENTER / RIGHT on each row,
-// but all rows remain vertically spaced.
 // =====================================================
 
 function generatePlatforms() {
@@ -153,20 +162,32 @@ function generatePlatforms() {
         mapWidth >
         NORMAL_MAP_WIDTH;
 
+    let platformCounter = 0;
+
     // =================================================
     // FLOOR
     // =================================================
 
     newPlatforms.push({
+        id:
+            "platform-" +
+            platformCounter++,
+
         x: 0,
-        y: mapHeight - 30,
-        width: mapWidth,
-        height: 30
+
+        y:
+            mapHeight - 30,
+
+        width:
+            mapWidth,
+
+        height: 30,
+
+        isGold: false
     });
 
     // =================================================
     // NORMAL MAP
-    // 800 x 600
     // =================================================
 
     if (!largeMap) {
@@ -174,7 +195,6 @@ function generatePlatforms() {
         const platformWidth = 145;
         const platformHeight = 20;
 
-        // Nice even vertical spacing.
         const rows = [
             490,
             410,
@@ -184,8 +204,6 @@ function generatePlatforms() {
             90
         ];
 
-        // Prevent the same pair from
-        // repeating every single row.
         let previousStyle = -1;
 
         for (
@@ -196,10 +214,6 @@ function generatePlatforms() {
 
             const y =
                 rows[i];
-
-            // -----------------------------------------
-            // THREE HORIZONTAL ZONES
-            // -----------------------------------------
 
             const leftX =
                 randomBetween(
@@ -219,21 +233,11 @@ function generatePlatforms() {
                     635
                 );
 
-            // -----------------------------------------
-            // PICK TWO ZONES FOR THIS ROW
-            //
-            // 0 = LEFT + RIGHT
-            // 1 = LEFT + CENTER
-            // 2 = CENTER + RIGHT
-            // -----------------------------------------
-
             let style =
                 Math.floor(
                     Math.random() * 3
                 );
 
-            // Try not to repeat the same
-            // arrangement twice in a row.
             if (
                 style ===
                 previousStyle
@@ -252,12 +256,15 @@ function generatePlatforms() {
             previousStyle =
                 style;
 
-            // LEFT + RIGHT
             if (
                 style === 0
             ) {
 
                 newPlatforms.push({
+                    id:
+                        "platform-" +
+                        platformCounter++,
+
                     x:
                         Math.round(
                             leftX
@@ -270,10 +277,17 @@ function generatePlatforms() {
                         platformWidth,
 
                     height:
-                        platformHeight
+                        platformHeight,
+
+                    isGold:
+                        false
                 });
 
                 newPlatforms.push({
+                    id:
+                        "platform-" +
+                        platformCounter++,
+
                     x:
                         Math.round(
                             rightX
@@ -286,16 +300,22 @@ function generatePlatforms() {
                         platformWidth,
 
                     height:
-                        platformHeight
+                        platformHeight,
+
+                    isGold:
+                        false
                 });
             }
 
-            // LEFT + CENTER
             else if (
                 style === 1
             ) {
 
                 newPlatforms.push({
+                    id:
+                        "platform-" +
+                        platformCounter++,
+
                     x:
                         Math.round(
                             leftX
@@ -308,10 +328,17 @@ function generatePlatforms() {
                         platformWidth,
 
                     height:
-                        platformHeight
+                        platformHeight,
+
+                    isGold:
+                        false
                 });
 
                 newPlatforms.push({
+                    id:
+                        "platform-" +
+                        platformCounter++,
+
                     x:
                         Math.round(
                             centerX
@@ -324,14 +351,20 @@ function generatePlatforms() {
                         platformWidth,
 
                     height:
-                        platformHeight
+                        platformHeight,
+
+                    isGold:
+                        false
                 });
             }
 
-            // CENTER + RIGHT
             else {
 
                 newPlatforms.push({
+                    id:
+                        "platform-" +
+                        platformCounter++,
+
                     x:
                         Math.round(
                             centerX
@@ -344,10 +377,17 @@ function generatePlatforms() {
                         platformWidth,
 
                     height:
-                        platformHeight
+                        platformHeight,
+
+                    isGold:
+                        false
                 });
 
                 newPlatforms.push({
+                    id:
+                        "platform-" +
+                        platformCounter++,
+
                     x:
                         Math.round(
                             rightX
@@ -360,16 +400,19 @@ function generatePlatforms() {
                         platformWidth,
 
                     height:
-                        platformHeight
+                        platformHeight,
+
+                    isGold:
+                        false
                 });
             }
         }
 
-        // =================================================
-        // TOP PLATFORM
-        // =================================================
-
         newPlatforms.push({
+            id:
+                "platform-" +
+                platformCounter++,
+
             x:
                 Math.round(
                     randomBetween(
@@ -378,20 +421,19 @@ function generatePlatforms() {
                     )
                 ),
 
-            y:
-                25,
+            y: 25,
 
-            width:
-                180,
+            width: 180,
 
-            height:
-                20
+            height: 20,
+
+            isGold:
+                false
         });
     }
 
     // =================================================
     // LARGE MAP
-    // 1600 x 1200
     // =================================================
 
     else {
@@ -424,19 +466,11 @@ function generatePlatforms() {
             const y =
                 rows[i];
 
-            // -----------------------------------------
-            // LEFT ZONE
-            // -----------------------------------------
-
             const leftX =
                 randomBetween(
                     50,
                     300
                 );
-
-            // -----------------------------------------
-            // CENTER ZONE
-            // -----------------------------------------
 
             const centerX =
                 randomBetween(
@@ -444,20 +478,17 @@ function generatePlatforms() {
                     830
                 );
 
-            // -----------------------------------------
-            // RIGHT ZONE
-            // -----------------------------------------
-
             const rightX =
                 randomBetween(
                     1250,
                     1370
                 );
 
-            // Large map gets all three zones
-            // because there is much more width.
-
             newPlatforms.push({
+                id:
+                    "platform-" +
+                    platformCounter++,
+
                 x:
                     Math.round(
                         leftX
@@ -470,10 +501,17 @@ function generatePlatforms() {
                     platformWidth,
 
                 height:
-                    platformHeight
+                    platformHeight,
+
+                isGold:
+                    false
             });
 
             newPlatforms.push({
+                id:
+                    "platform-" +
+                    platformCounter++,
+
                 x:
                     Math.round(
                         centerX
@@ -486,10 +524,17 @@ function generatePlatforms() {
                     platformWidth,
 
                 height:
-                    platformHeight
+                    platformHeight,
+
+                isGold:
+                    false
             });
 
             newPlatforms.push({
+                id:
+                    "platform-" +
+                    platformCounter++,
+
                 x:
                     Math.round(
                         rightX
@@ -502,15 +547,18 @@ function generatePlatforms() {
                     platformWidth,
 
                 height:
-                    platformHeight
+                    platformHeight,
+
+                isGold:
+                    false
             });
         }
 
-        // =================================================
-        // LARGE TOP PLATFORM
-        // =================================================
-
         newPlatforms.push({
+            id:
+                "platform-" +
+                platformCounter++,
+
             x:
                 Math.round(
                     randomBetween(
@@ -519,22 +567,357 @@ function generatePlatforms() {
                     )
                 ),
 
-            y:
-                45,
+            y: 45,
 
-            width:
-                260,
+            width: 260,
 
-            height:
-                20
+            height: 20,
+
+            isGold:
+                false
         });
     }
+
+    // =================================================
+    // CHOOSE ONE RANDOM GOLD PLATFORM
+    // =================================================
+    //
+    // Ground is index 0, so it can never
+    // become the gold platform.
+    // =================================================
+
+    if (
+        newPlatforms.length >
+        1
+    ) {
+
+        const goldIndex =
+            1 +
+            Math.floor(
+                Math.random() *
+                (
+                    newPlatforms.length -
+                    1
+                )
+            );
+
+        newPlatforms[
+            goldIndex
+        ].isGold =
+            true;
+    }
+
+    resetGoldControl();
 
     return newPlatforms;
 }
 
 platforms =
     generatePlatforms();
+
+// =====================================================
+// GOLD PLATFORM
+// =====================================================
+
+function getGoldPlatform() {
+
+    return platforms.find(
+        platform =>
+            platform.isGold
+    ) || null;
+}
+
+function playerIsStandingOnPlatform(
+    player,
+    platform
+) {
+
+    if (
+        !player ||
+        player.dead ||
+        !platform
+    ) {
+        return false;
+    }
+
+    const playerBottom =
+        player.y +
+        PLAYER_SIZE;
+
+    const overlapsX =
+        player.x +
+        PLAYER_SIZE >
+        platform.x &&
+
+        player.x <
+        platform.x +
+        platform.width;
+
+    // Small tolerance because player positions
+    // are sent over the network.
+    const standingY =
+        Math.abs(
+            playerBottom -
+            platform.y
+        ) <= 6;
+
+    return (
+        overlapsX &&
+        standingY
+    );
+}
+
+// =====================================================
+// APPLY A POWERUP DIRECTLY
+// =====================================================
+
+function givePowerupToPlayer(
+    playerId,
+    type
+) {
+
+    const player =
+        players[playerId];
+
+    if (
+        !player ||
+        player.dead
+    ) {
+        return;
+    }
+
+    if (
+        type ===
+        "health"
+    ) {
+
+        player.maxHealth =
+            Math.min(
+                ABSOLUTE_MAX_HEALTH,
+
+                player.maxHealth +
+                4
+            );
+    }
+
+    if (
+        type ===
+        "dash"
+    ) {
+
+        player.dashLevel++;
+    }
+
+    if (
+        type ===
+        "greenFireball"
+    ) {
+
+        player.greenLevel++;
+    }
+
+    // Any powerup heals you fully.
+    player.health =
+        player.maxHealth;
+
+    io.emit(
+        "playerPowerupChanged",
+        {
+            id:
+                playerId,
+
+            health:
+                player.health,
+
+            maxHealth:
+                player.maxHealth,
+
+            dashLevel:
+                player.dashLevel,
+
+            greenLevel:
+                player.greenLevel
+        }
+    );
+
+    io.emit(
+        "playerHealthChanged",
+        {
+            id:
+                playerId,
+
+            health:
+                player.health,
+
+            maxHealth:
+                player.maxHealth,
+
+            dead:
+                false,
+
+            respawnAllowedAt:
+                0
+        }
+    );
+}
+
+// =====================================================
+// GOLD PLATFORM CONTROL CHECK
+// =====================================================
+
+setInterval(
+    () => {
+
+        const goldPlatform =
+            getGoldPlatform();
+
+        if (
+            !goldPlatform
+        ) {
+
+            resetGoldControl();
+
+            return;
+        }
+
+        const standingPlayers =
+            [];
+
+        for (
+            const id in players
+        ) {
+
+            const player =
+                players[id];
+
+            if (
+                playerIsStandingOnPlatform(
+                    player,
+                    goldPlatform
+                )
+            ) {
+
+                standingPlayers.push(
+                    id
+                );
+            }
+        }
+
+        // Must be EXACTLY one player.
+        if (
+            standingPlayers.length !==
+            1
+        ) {
+
+            if (
+                goldControllerId !==
+                null
+            ) {
+
+                resetGoldControl();
+            }
+
+            return;
+        }
+
+        const controllerId =
+            standingPlayers[0];
+
+        // New player gained control.
+        if (
+            controllerId !==
+            goldControllerId
+        ) {
+
+            goldControllerId =
+                controllerId;
+
+            goldControlStartedAt =
+                Date.now();
+        }
+
+        const elapsed =
+            Date.now() -
+            goldControlStartedAt;
+
+        const progress =
+            Math.min(
+                1,
+                elapsed /
+                GOLD_PLATFORM_TIME
+            );
+
+        const remaining =
+            Math.max(
+                0,
+                (
+                    GOLD_PLATFORM_TIME -
+                    elapsed
+                ) / 1000
+            );
+
+        io.emit(
+            "goldPlatformStatus",
+            {
+                controllerId:
+                    goldControllerId,
+
+                progress:
+                    progress,
+
+                remaining:
+                    remaining
+            }
+        );
+
+        // 30 seconds completed.
+        if (
+            elapsed >=
+            GOLD_PLATFORM_TIME
+        ) {
+
+            const rewardType =
+                randomPowerupType();
+
+            givePowerupToPlayer(
+                controllerId,
+                rewardType
+            );
+
+            io.emit(
+                "goldPlatformReward",
+                {
+                    playerId:
+                        controllerId,
+
+                    type:
+                        rewardType
+                }
+            );
+
+            // Start another 30-second
+            // control period immediately.
+            goldControlStartedAt =
+                Date.now();
+
+            io.emit(
+                "goldPlatformStatus",
+                {
+                    controllerId:
+                        controllerId,
+
+                    progress:
+                        0,
+
+                    remaining:
+                        30
+                }
+            );
+        }
+
+    },
+    100
+);
 
 // =====================================================
 // SPAWN POSITION
@@ -606,7 +989,7 @@ function createPlayer() {
 }
 
 // =====================================================
-// POWERUPS
+// DROPPED POWERUPS
 // =====================================================
 
 function createRandomPowerup(
@@ -614,12 +997,7 @@ function createRandomPowerup(
 ) {
 
     const type =
-        POWERUP_TYPES[
-            Math.floor(
-                Math.random() *
-                POWERUP_TYPES.length
-            )
-        ];
+        randomPowerupType();
 
     powerupCounter++;
 
@@ -801,12 +1179,6 @@ function updateMapSize() {
                 useLargeMap
         }
     );
-
-    console.log(
-        useLargeMap
-            ? "Map expanded to 1600x1200"
-            : "Map shrank to 800x600"
-    );
 }
 
 // =====================================================
@@ -827,8 +1199,7 @@ function killPlayer(
         return;
     }
 
-    player.health =
-        0;
+    player.health = 0;
 
     player.dead =
         true;
@@ -849,6 +1220,14 @@ function killPlayer(
     createRandomPowerup(
         player
     );
+
+    if (
+        goldControllerId ===
+        playerId
+    ) {
+
+        resetGoldControl();
+    }
 
     io.emit(
         "playerHealthChanged",
@@ -969,26 +1348,17 @@ setInterval(
             powerups
         );
 
-        console.log(
-            "Platforms changed!"
-        );
-
     },
     PLATFORM_CHANGE_TIME
 );
 
 // =====================================================
-// SOCKET CONNECTION
+// CONNECTION
 // =====================================================
 
 io.on(
     "connection",
     (socket) => {
-
-        console.log(
-            "Player connected:",
-            socket.id
-        );
 
         players[socket.id] =
             createPlayer();
@@ -1094,7 +1464,7 @@ io.on(
         );
 
         // =================================================
-        // NORMAL SHOVE
+        // KNOCKBACK
         // =================================================
 
         socket.on(
@@ -1120,12 +1490,7 @@ io.on(
 
                 if (
                     !attacker ||
-                    attacker.dead
-                ) {
-                    return;
-                }
-
-                if (
+                    attacker.dead ||
                     !target ||
                     target.dead
                 ) {
@@ -1196,30 +1561,6 @@ io.on(
                     return;
                 }
 
-                const attacker =
-                    players[
-                        socket.id
-                    ];
-
-                const target =
-                    players[
-                        data.targetId
-                    ];
-
-                if (
-                    !attacker ||
-                    attacker.dead
-                ) {
-                    return;
-                }
-
-                if (
-                    !target ||
-                    target.dead
-                ) {
-                    return;
-                }
-
                 damagePlayer(
                     data.targetId,
                     2
@@ -1279,12 +1620,7 @@ io.on(
                 if (
                     !attacker ||
                     attacker.dead ||
-                    attacker.greenLevel <= 0
-                ) {
-                    return;
-                }
-
-                if (
+                    attacker.greenLevel <= 0 ||
                     !target ||
                     target.dead
                 ) {
@@ -1344,9 +1680,6 @@ io.on(
                         ? -1
                         : 1;
 
-                player.facing =
-                    direction;
-
                 io.emit(
                     "playerMeleeSwing",
                     {
@@ -1384,12 +1717,7 @@ io.on(
                 if (
                     !attacker ||
                     attacker.dead ||
-                    attacker.greenLevel > 0
-                ) {
-                    return;
-                }
-
-                if (
+                    attacker.greenLevel > 0 ||
                     !target ||
                     target.dead
                 ) {
@@ -1470,37 +1798,10 @@ io.on(
                     return;
                 }
 
-                if (
-                    powerup.type ===
-                    "health"
-                ) {
-
-                    player.maxHealth =
-                        Math.min(
-                            ABSOLUTE_MAX_HEALTH,
-                            player.maxHealth +
-                            4
-                        );
-                }
-
-                if (
-                    powerup.type ===
-                    "dash"
-                ) {
-
-                    player.dashLevel++;
-                }
-
-                if (
-                    powerup.type ===
-                    "greenFireball"
-                ) {
-
-                    player.greenLevel++;
-                }
-
-                player.health =
-                    player.maxHealth;
+                givePowerupToPlayer(
+                    socket.id,
+                    powerup.type
+                );
 
                 delete powerups[
                     powerupId
@@ -1509,46 +1810,6 @@ io.on(
                 io.emit(
                     "powerupRemoved",
                     powerupId
-                );
-
-                io.emit(
-                    "playerPowerupChanged",
-                    {
-                        id:
-                            socket.id,
-
-                        health:
-                            player.health,
-
-                        maxHealth:
-                            player.maxHealth,
-
-                        dashLevel:
-                            player.dashLevel,
-
-                        greenLevel:
-                            player.greenLevel
-                    }
-                );
-
-                io.emit(
-                    "playerHealthChanged",
-                    {
-                        id:
-                            socket.id,
-
-                        health:
-                            player.health,
-
-                        maxHealth:
-                            player.maxHealth,
-
-                        dead:
-                            false,
-
-                        respawnAllowedAt:
-                            0
-                    }
                 );
             }
         );
@@ -1628,9 +1889,6 @@ io.on(
                         maxHealth:
                             player.maxHealth,
 
-                        dead:
-                            false,
-
                         facing:
                             player.facing,
 
@@ -1638,9 +1896,6 @@ io.on(
                             0,
 
                         greenLevel:
-                            0,
-
-                        respawnAllowedAt:
                             0
                     }
                 );
@@ -1655,11 +1910,6 @@ io.on(
             "disconnect",
             () => {
 
-                console.log(
-                    "Player disconnected:",
-                    socket.id
-                );
-
                 delete players[
                     socket.id
                 ];
@@ -1668,6 +1918,14 @@ io.on(
                     "playerDisconnected",
                     socket.id
                 );
+
+                if (
+                    goldControllerId ===
+                    socket.id
+                ) {
+
+                    resetGoldControl();
+                }
 
                 updateMapSize();
             }
@@ -1688,27 +1946,13 @@ server.listen(
     "0.0.0.0",
     () => {
 
-        console.log("");
-
         console.log(
-            "=============================="
+            "BLOCK BATTLE IS RUNNING!"
         );
-
-        console.log(
-            "   BLOCK BATTLE IS RUNNING!"
-        );
-
-        console.log(
-            "=============================="
-        );
-
-        console.log("");
 
         console.log(
             "Server running on port " +
             PORT
         );
-
-        console.log("");
     }
 );
