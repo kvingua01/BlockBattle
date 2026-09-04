@@ -14,7 +14,8 @@ app.get("/", (req, res) => {
 });
 
 const MAX_HEALTH = 20;
-// We use 20 health points because:
+
+// 20 health points = 10 hearts
 // 2 points = 1 full heart
 // 1 point = 1/2 heart
 
@@ -24,6 +25,7 @@ function createPlayer() {
     return {
         x: 100 + Math.random() * 300,
         y: 500,
+
         color:
             "#" +
             Math.floor(Math.random() * 16777215)
@@ -32,14 +34,12 @@ function createPlayer() {
 
         health: MAX_HEALTH,
         dead: false,
-
-        // Counts successful melee hits.
-        // Resets after 5.
-        meleeHits: 0
+        facing: 1
     };
 }
 
 io.on("connection", (socket) => {
+
     console.log("Player connected:", socket.id);
 
     players[socket.id] = createPlayer();
@@ -53,11 +53,12 @@ io.on("connection", (socket) => {
         ...players[socket.id]
     });
 
-    // -------------------------
+    // =====================================================
     // MOVEMENT
-    // -------------------------
+    // =====================================================
 
     socket.on("playerMove", (data) => {
+
         const player = players[socket.id];
 
         if (!player || player.dead) return;
@@ -65,18 +66,24 @@ io.on("connection", (socket) => {
         player.x = data.x;
         player.y = data.y;
 
+        if (data.facing === 1 || data.facing === -1) {
+            player.facing = data.facing;
+        }
+
         socket.broadcast.emit("playerMoved", {
             id: socket.id,
             x: player.x,
-            y: player.y
+            y: player.y,
+            facing: player.facing
         });
     });
 
-    // -------------------------
+    // =====================================================
     // NORMAL SHOVE
-    // -------------------------
+    // =====================================================
 
     socket.on("knockbackPlayer", (data) => {
+
         if (!data || !data.targetId) return;
 
         const attacker = players[socket.id];
@@ -91,24 +98,33 @@ io.on("connection", (socket) => {
         });
     });
 
-    // -------------------------
+    // =====================================================
     // FIREBALL
-    // -------------------------
+    // =====================================================
 
     socket.on("shootFireball", (fireball) => {
+
         const player = players[socket.id];
 
         if (!player || player.dead) return;
 
-        socket.broadcast.emit("spawnFireball", fireball);
+        socket.broadcast.emit(
+            "spawnFireball",
+            fireball
+        );
     });
 
     socket.on("removeFireball", (data) => {
-        socket.broadcast.emit("removeFireball", data);
+
+        socket.broadcast.emit(
+            "removeFireball",
+            data
+        );
     });
 
-    // Fireball does ONE FULL HEART.
+    // Fireball = ONE FULL HEART.
     socket.on("fireballHit", (data) => {
+
         if (!data || !data.targetId) return;
 
         const attacker = players[socket.id];
@@ -120,22 +136,45 @@ io.on("connection", (socket) => {
         target.health -= 2;
 
         if (target.health <= 0) {
+
             target.health = 0;
             target.dead = true;
         }
 
         io.emit("playerHealthChanged", {
+
             id: data.targetId,
             health: target.health,
             dead: target.dead
         });
     });
 
-    // -------------------------
-    // MELEE ATTACK
-    // -------------------------
+    // =====================================================
+    // SWORD / MELEE
+    // =====================================================
+
+    socket.on("meleeSwing", (data) => {
+
+        const player = players[socket.id];
+
+        if (!player || player.dead) return;
+
+        const facing =
+            data &&
+            data.facing === -1
+                ? -1
+                : 1;
+
+        player.facing = facing;
+
+        io.emit("playerMeleeSwing", {
+            id: socket.id,
+            facing: facing
+        });
+    });
 
     socket.on("meleeHit", (data) => {
+
         if (!data || !data.targetId) return;
 
         const attacker = players[socket.id];
@@ -144,85 +183,109 @@ io.on("connection", (socket) => {
         if (!attacker || attacker.dead) return;
         if (!target || target.dead) return;
 
-        // Every successful melee hit counts.
-        attacker.meleeHits += 1;
+        // EVERY sword hit now does HALF A HEART.
+        target.health -= 1;
 
-        // Small shove on every melee hit.
-        io.to(data.targetId).emit("receiveKnockback", {
-            velocityX: data.velocityX,
-            velocityY: -2
-        });
+        if (target.health <= 0) {
 
-        // Every fifth hit removes HALF A HEART.
-        if (attacker.meleeHits >= 5) {
-            attacker.meleeHits = 0;
-
-            target.health -= 1;
-
-            if (target.health <= 0) {
-                target.health = 0;
-                target.dead = true;
-            }
-
-            io.emit("playerHealthChanged", {
-                id: data.targetId,
-                health: target.health,
-                dead: target.dead
-            });
+            target.health = 0;
+            target.dead = true;
         }
 
-        // Update attacker's 0/5 melee meter.
-        io.to(socket.id).emit("meleeCountChanged", {
-            count: attacker.meleeHits
+        // Small sword knockback.
+        io.to(data.targetId).emit(
+            "receiveKnockback",
+            {
+                velocityX: data.velocityX,
+                velocityY: -2
+            }
+        );
+
+        io.emit("playerHealthChanged", {
+
+            id: data.targetId,
+            health: target.health,
+            dead: target.dead
         });
     });
 
-    // -------------------------
+    // =====================================================
     // RESPAWN
-    // -------------------------
+    // =====================================================
 
     socket.on("respawnPlayer", () => {
+
         const player = players[socket.id];
 
         if (!player || !player.dead) return;
 
-        player.x = 100 + Math.random() * 300;
+        player.x =
+            100 +
+            Math.random() * 300;
+
         player.y = 500;
 
         player.health = MAX_HEALTH;
         player.dead = false;
-        player.meleeHits = 0;
+        player.facing = 1;
 
         io.emit("playerRespawned", {
+
             id: socket.id,
+
             x: player.x,
             y: player.y,
+
             health: player.health,
-            dead: false
+
+            dead: false,
+            facing: player.facing
         });
     });
 
-    // -------------------------
+    // =====================================================
     // DISCONNECT
-    // -------------------------
+    // =====================================================
 
     socket.on("disconnect", () => {
-        console.log("Player disconnected:", socket.id);
+
+        console.log(
+            "Player disconnected:",
+            socket.id
+        );
 
         delete players[socket.id];
 
-        io.emit("playerDisconnected", socket.id);
+        io.emit(
+            "playerDisconnected",
+            socket.id
+        );
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT =
+    process.env.PORT || 3000;
 
-server.listen(PORT, "0.0.0.0", () => {
-    console.log("");
-    console.log("==============================");
-    console.log("   BLOCK BATTLE IS RUNNING!");
-    console.log("==============================");
-    console.log("");
-    console.log("Server running on port " + PORT);
-    console.log("");
-});
+server.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
+
+        console.log("");
+        console.log(
+            "=============================="
+        );
+        console.log(
+            "   BLOCK BATTLE IS RUNNING!"
+        );
+        console.log(
+            "=============================="
+        );
+        console.log("");
+        console.log(
+            "Server running on port " +
+            PORT
+        );
+        console.log("");
+    }
+);
