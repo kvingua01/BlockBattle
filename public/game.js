@@ -1,10 +1,7 @@
 const socket = io();
 
-const canvas =
-    document.getElementById("gameCanvas");
-
-const ctx =
-    canvas.getContext("2d");
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
 // =====================================================
 // GAME SETTINGS
@@ -111,7 +108,10 @@ socket.on("playerMoved", (data) => {
 
     players[data.id].x = data.x;
     players[data.id].y = data.y;
-    players[data.id].facing = data.facing || 1;
+
+    if (data.facing === 1 || data.facing === -1) {
+        players[data.id].facing = data.facing;
+    }
 });
 
 socket.on("playerDisconnected", (id) => {
@@ -181,7 +181,6 @@ socket.on("removeFireball", (data) => {
 
 document.addEventListener("keydown", (event) => {
 
-    // Prevent arrow keys and space from scrolling page
     if (
         event.code === "ArrowLeft" ||
         event.code === "ArrowRight" ||
@@ -240,10 +239,7 @@ document.addEventListener("keyup", (event) => {
         const heldTime =
             Date.now() - spacePressedAt;
 
-        if (
-            heldTime >=
-            FIREBALL_CHARGE_TIME
-        ) {
+        if (heldTime >= FIREBALL_CHARGE_TIME) {
             shootFireball();
         } else {
             normalShove();
@@ -292,23 +288,17 @@ function normalShove() {
         const distance =
             Math.sqrt(dx * dx + dy * dy);
 
-        if (
-            distance <=
-            NORMAL_SHOVE_RANGE
-        ) {
+        if (distance <= NORMAL_SHOVE_RANGE) {
+
             const direction =
                 dx >= 0 ? 1 : -1;
 
-            socket.emit(
-                "knockbackPlayer",
-                {
-                    targetId: id,
-                    velocityX:
-                        direction *
-                        NORMAL_KNOCKBACK,
-                    velocityY: -4
-                }
-            );
+            socket.emit("knockbackPlayer", {
+                targetId: id,
+                velocityX:
+                    direction * NORMAL_KNOCKBACK,
+                velocityY: -4
+            });
         }
     }
 }
@@ -339,12 +329,9 @@ function performMeleeAttack() {
         facing: facing
     };
 
-    socket.emit(
-        "meleeSwing",
-        {
-            facing: facing
-        }
-    );
+    socket.emit("meleeSwing", {
+        facing: facing
+    });
 
     let closestTarget = null;
     let closestDistance = Infinity;
@@ -399,17 +386,11 @@ function performMeleeAttack() {
 
     if (!closestTarget) return;
 
-    socket.emit(
-        "meleeHit",
-        {
-            targetId:
-                closestTarget.id,
-
-            velocityX:
-                facing *
-                MELEE_KNOCKBACK
-        }
-    );
+    socket.emit("meleeHit", {
+        targetId: closestTarget.id,
+        velocityX:
+            facing * MELEE_KNOCKBACK
+    });
 }
 
 // =====================================================
@@ -433,16 +414,13 @@ function shootFireball() {
         ownerId: myId,
 
         x:
-            me.x +
-            PLAYER_SIZE / 2,
+            me.x + PLAYER_SIZE / 2,
 
         y:
-            me.y +
-            PLAYER_SIZE / 2,
+            me.y + PLAYER_SIZE / 2,
 
         velocityX:
-            facing *
-            FIREBALL_SPEED,
+            facing * FIREBALL_SPEED,
 
         radius: 10
     };
@@ -462,11 +440,11 @@ function shootFireball() {
 function updateFireballs() {
 
     for (
-        let i =
-            fireballs.length - 1;
+        let i = fireballs.length - 1;
         i >= 0;
         i--
     ) {
+
         const fireball =
             fireballs[i];
 
@@ -478,15 +456,14 @@ function updateFireballs() {
             fireball.x >
                 canvas.width + 100
         ) {
+
             if (
-                fireball.ownerId ===
-                myId
+                fireball.ownerId === myId
             ) {
                 socket.emit(
                     "removeFireball",
                     {
-                        id:
-                            fireball.id
+                        id: fireball.id
                     }
                 );
             }
@@ -497,8 +474,7 @@ function updateFireballs() {
         }
 
         if (
-            fireball.ownerId !==
-            myId
+            fireball.ownerId !== myId
         ) {
             continue;
         }
@@ -506,8 +482,7 @@ function updateFireballs() {
         for (const id in players) {
 
             if (
-                id ===
-                fireball.ownerId
+                id === fireball.ownerId
             ) {
                 continue;
             }
@@ -520,20 +495,16 @@ function updateFireballs() {
             }
 
             const centerX =
-                target.x +
-                PLAYER_SIZE / 2;
+                target.x + PLAYER_SIZE / 2;
 
             const centerY =
-                target.y +
-                PLAYER_SIZE / 2;
+                target.y + PLAYER_SIZE / 2;
 
             const dx =
-                fireball.x -
-                centerX;
+                fireball.x - centerX;
 
             const dy =
-                fireball.y -
-                centerY;
+                fireball.y - centerY;
 
             const distance =
                 Math.sqrt(
@@ -546,6 +517,7 @@ function updateFireballs() {
                 fireball.radius +
                     PLAYER_SIZE / 2
             ) {
+
                 socket.emit(
                     "fireballHit",
                     {
@@ -574,8 +546,7 @@ function updateFireballs() {
                 socket.emit(
                     "removeFireball",
                     {
-                        id:
-                            fireball.id
+                        id: fireball.id
                     }
                 );
 
@@ -603,21 +574,27 @@ function updatePlayer() {
         return;
     }
 
-    // LEFT: A or Left Arrow
+    // LEFT
+    // A or LEFT ARROW
     if (
         leftHeld() &&
         !rightHeld()
     ) {
         velocityX = -MOVE_SPEED;
+
+        // Remember last direction moved.
         facing = -1;
     }
 
-    // RIGHT: D or Right Arrow
+    // RIGHT
+    // D or RIGHT ARROW
     else if (
         rightHeld() &&
         !leftHeld()
     ) {
         velocityX = MOVE_SPEED;
+
+        // Remember last direction moved.
         facing = 1;
     }
 
@@ -625,22 +602,19 @@ function updatePlayer() {
         velocityX *= 0.8;
 
         if (
-            Math.abs(velocityX) <
-            0.1
+            Math.abs(velocityX) < 0.1
         ) {
             velocityX = 0;
         }
     }
 
-    // JUMP: W or Up Arrow
-    // Holding either key keeps auto-jump.
+    // W or UP ARROW
+    // Holding it keeps auto-jump working.
     if (
         jumpHeld() &&
         onGround
     ) {
-        velocityY =
-            -JUMP_POWER;
-
+        velocityY = -JUMP_POWER;
         onGround = false;
     }
 
@@ -652,12 +626,10 @@ function updatePlayer() {
 
     if (
         me.x >
-        canvas.width -
-            PLAYER_SIZE
+        canvas.width - PLAYER_SIZE
     ) {
         me.x =
-            canvas.width -
-            PLAYER_SIZE;
+            canvas.width - PLAYER_SIZE;
     }
 
     const oldY = me.y;
@@ -668,27 +640,23 @@ function updatePlayer() {
 
     onGround = false;
 
+    // PLATFORM COLLISION
     if (velocityY >= 0) {
 
-        for (
-            const platform
-            of platforms
-        ) {
+        for (const platform of platforms) {
+
             const oldBottom =
-                oldY +
-                PLAYER_SIZE;
+                oldY + PLAYER_SIZE;
 
             const newBottom =
-                me.y +
-                PLAYER_SIZE;
+                me.y + PLAYER_SIZE;
 
             const overlapsX =
-                me.x +
-                    PLAYER_SIZE >
+                me.x + PLAYER_SIZE >
                     platform.x &&
                 me.x <
                     platform.x +
-                        platform.width;
+                    platform.width;
 
             const crossedTop =
                 oldBottom <=
@@ -713,6 +681,7 @@ function updatePlayer() {
         }
     }
 
+    // FALL OFF BOTTOM
     if (
         me.y >
         canvas.height + 100
@@ -740,6 +709,64 @@ function updatePlayer() {
 }
 
 // =====================================================
+// DRAW EYE
+// =====================================================
+
+function drawEye(player) {
+
+    // Which direction is this cube looking?
+    const lookDirection =
+        player.facing === -1
+            ? -1
+            : 1;
+
+    // IMPORTANT:
+    // We are NOT changing the cube itself.
+    // This only draws a small black eye
+    // ON TOP of the existing colored square.
+
+    const eyeWidth = 5;
+    const eyeHeight = 13;
+
+    let eyeX;
+
+    if (lookDirection === 1) {
+
+        // Looking RIGHT
+        eyeX =
+            player.x +
+            PLAYER_SIZE -
+            eyeWidth -
+            4;
+
+    } else {
+
+        // Looking LEFT
+        eyeX =
+            player.x + 4;
+    }
+
+    const eyeY =
+        player.y +
+        7;
+
+    // Black vertical eye
+    ctx.fillStyle = "#000000";
+
+    ctx.beginPath();
+
+    ctx.roundRect(
+        eyeX,
+        eyeY,
+        eyeWidth,
+        eyeHeight,
+        3
+    );
+
+    ctx.fill();
+}
+
+// =====================================================
 // DRAW HEARTS
 // =====================================================
 
@@ -748,6 +775,7 @@ function drawHearts(
     y,
     health
 ) {
+
     ctx.font = "24px Arial";
 
     for (
@@ -755,40 +783,43 @@ function drawHearts(
         heart < 10;
         heart++
     ) {
+
         const amount =
             health -
             heart * 2;
 
         if (amount >= 2) {
+
             ctx.fillStyle =
                 "#ff3030";
 
             ctx.fillText(
                 "♥",
-                x +
-                    heart * 25,
+                x + heart * 25,
                 y
             );
+
         } else if (
             amount === 1
         ) {
+
             ctx.fillStyle =
                 "#ff9f1c";
 
             ctx.fillText(
                 "♥",
-                x +
-                    heart * 25,
+                x + heart * 25,
                 y
             );
+
         } else {
+
             ctx.fillStyle =
                 "#666666";
 
             ctx.fillText(
                 "♡",
-                x +
-                    heart * 25,
+                x + heart * 25,
                 y
             );
         }
@@ -803,6 +834,7 @@ function drawSword(
     player,
     swing
 ) {
+
     if (
         !swing ||
         player.dead
@@ -883,6 +915,7 @@ function drawSword(
             bladeLength
         );
 
+    // Handle
     ctx.strokeStyle =
         "#8b5a2b";
 
@@ -902,6 +935,7 @@ function drawSword(
 
     ctx.stroke();
 
+    // Blade
     ctx.strokeStyle =
         "#e8edf2";
 
@@ -921,6 +955,7 @@ function drawSword(
 
     ctx.stroke();
 
+    // Blade highlight
     ctx.strokeStyle =
         "#ffffff";
 
@@ -954,6 +989,7 @@ function draw() {
         canvas.height
     );
 
+    // BACKGROUND
     ctx.fillStyle =
         "#11111b";
 
@@ -964,6 +1000,7 @@ function draw() {
         canvas.height
     );
 
+    // PLATFORMS
     ctx.fillStyle =
         "#dddddd";
 
@@ -971,6 +1008,7 @@ function draw() {
         const platform
         of platforms
     ) {
+
         ctx.fillRect(
             platform.x,
             platform.y,
@@ -979,17 +1017,35 @@ function draw() {
         );
     }
 
-    for (const id in players) {
+    // =================================================
+    // PLAYERS
+    // =================================================
+
+    for (
+        const id
+        in players
+    ) {
 
         const player =
             players[id];
 
         if (!player) continue;
 
-        ctx.globalAlpha =
-            player.dead
-                ? 0.25
-                : 1;
+        if (player.dead) {
+
+            ctx.globalAlpha =
+                0.25;
+
+        } else {
+
+            ctx.globalAlpha =
+                1;
+        }
+
+        // ---------------------------------------------
+        // ORIGINAL CUBE
+        // ---------------------------------------------
+        // Same exact colored square as before.
 
         ctx.fillStyle =
             player.color ||
@@ -1002,9 +1058,21 @@ function draw() {
             PLAYER_SIZE
         );
 
+        // ---------------------------------------------
+        // NEW EYE
+        // ---------------------------------------------
+        // This is the ONLY visual addition
+        // to the character.
+
+        drawEye(player);
+
         ctx.globalAlpha = 1;
 
-        if (id === myId) {
+        // YOU LABEL
+        if (
+            id === myId
+        ) {
+
             ctx.fillStyle =
                 "#ffffff";
 
@@ -1018,6 +1086,7 @@ function draw() {
             );
         }
 
+        // HEALTH BAR
         const health =
             player.health ??
             MAX_HEALTH;
@@ -1050,6 +1119,7 @@ function draw() {
             3
         );
 
+        // SWORD
         const swing =
             meleeSwings[id];
 
@@ -1063,20 +1133,28 @@ function draw() {
                 elapsed <=
                 SWORD_SWING_TIME
             ) {
+
                 drawSword(
                     player,
                     swing
                 );
+
             } else {
+
                 delete meleeSwings[id];
             }
         }
     }
 
+    // =================================================
+    // FIREBALLS
+    // =================================================
+
     for (
         const fireball
         of fireballs
     ) {
+
         ctx.beginPath();
 
         ctx.arc(
@@ -1107,6 +1185,10 @@ function draw() {
 
         ctx.fill();
     }
+
+    // =================================================
+    // HUD
+    // =================================================
 
     const me =
         players[myId];
@@ -1166,6 +1248,10 @@ function draw() {
             112
         );
     }
+
+    // =================================================
+    // FIREBALL CHARGE BAR
+    // =================================================
 
     if (
         spaceHeld &&
@@ -1246,6 +1332,10 @@ function draw() {
             "left";
     }
 
+    // =================================================
+    // DEATH / RESPAWN
+    // =================================================
+
     if (
         me &&
         me.dead
@@ -1277,6 +1367,7 @@ function draw() {
         );
 
         respawnButton = {
+
             x:
                 canvas.width / 2 -
                 100,
@@ -1312,7 +1403,9 @@ function draw() {
 
         ctx.textAlign =
             "left";
+
     } else {
+
         respawnButton = null;
     }
 }
@@ -1376,6 +1469,7 @@ canvas.addEventListener(
                 respawnButton.y +
                 respawnButton.height
         ) {
+
             socket.emit(
                 "respawnPlayer"
             );
