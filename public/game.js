@@ -31,7 +31,26 @@ const SWORD_SWING_TIME = 220;
 
 const BASE_MAX_HEALTH = 20;
 
-const DASH_POWER = 15;
+// =====================================================
+// DASH SETTINGS
+// =====================================================
+
+// Old dash power was 15.
+//
+// Level 1 is now DOUBLE that = 30.
+//
+// Each additional level adds 25%
+// of the NEW base dash distance.
+//
+// Level 1 = 30
+// Level 2 = 37.5
+// Level 3 = 45
+// Level 4 = 52.5
+// Level 5+ = 60 MAX
+
+const BASE_DASH_POWER = 30;
+
+const MAX_DASH_DISTANCE_UPGRADES = 4;
 
 const POWERUP_RADIUS = 13;
 
@@ -128,6 +147,48 @@ function getDashCooldown(player) {
 }
 
 // =====================================================
+// DASH DISTANCE / POWER
+// =====================================================
+
+function getDashPower(player) {
+
+    if (
+        !player ||
+        player.dashLevel <= 0
+    ) {
+        return 0;
+    }
+
+    // Level 1 starts at BASE_DASH_POWER.
+    //
+    // Then levels 2-5 add 25% each.
+    //
+    // Level 1 = 30
+    // Level 2 = 37.5
+    // Level 3 = 45
+    // Level 4 = 52.5
+    // Level 5+ = 60
+
+    const distanceUpgrades =
+        Math.min(
+            Math.max(
+                player.dashLevel - 1,
+                0
+            ),
+            MAX_DASH_DISTANCE_UPGRADES
+        );
+
+    const multiplier =
+        1 +
+        distanceUpgrades * 0.25;
+
+    return (
+        BASE_DASH_POWER *
+        multiplier
+    );
+}
+
+// =====================================================
 // GREEN FIREBALL COOLDOWN
 // =====================================================
 
@@ -190,8 +251,6 @@ socket.on(
         const me =
             players[myId];
 
-        // Put everybody safely back at the bottom
-        // when the map changes.
         if (
             me &&
             !me.dead
@@ -361,6 +420,7 @@ socket.on(
             data.maxHealth !==
             undefined
         ) {
+
             player.maxHealth =
                 data.maxHealth;
         }
@@ -617,7 +677,7 @@ document.addEventListener(
             return;
         }
 
-        // SPACE ATTACK
+        // SPACE
         if (
             event.code === "Space" &&
             !spaceHeld
@@ -630,7 +690,7 @@ document.addEventListener(
                 Date.now();
         }
 
-        // F = sword OR green fireball
+        // F
         if (
             event.code === "KeyF" &&
             !event.repeat
@@ -745,8 +805,14 @@ function performDash() {
     lastDashTime =
         now;
 
-    // Upward dash ONLY if W/Up is held
-    // WITHOUT left/right.
+    // Calculate dash strength based
+    // on how many Dash powerups you have.
+    const dashPower =
+        getDashPower(me);
+
+    // UPWARD DASH:
+    // W or Up Arrow must be held,
+    // and NO left/right key can be held.
     const upwardDash =
         jumpHeld() &&
         !leftHeld() &&
@@ -756,10 +822,11 @@ function performDash() {
         upwardDash
     ) {
 
-        velocityX = 0;
+        velocityX =
+            0;
 
         velocityY =
-            -DASH_POWER;
+            -dashPower;
 
         onGround =
             false;
@@ -774,7 +841,8 @@ function performDash() {
             !rightHeld()
         ) {
 
-            direction = -1;
+            direction =
+                -1;
         }
 
         if (
@@ -782,7 +850,8 @@ function performDash() {
             !leftHeld()
         ) {
 
-            direction = 1;
+            direction =
+                1;
         }
 
         facing =
@@ -790,7 +859,7 @@ function performDash() {
 
         velocityX =
             direction *
-            DASH_POWER;
+            dashPower;
     }
 }
 
@@ -810,7 +879,6 @@ function performFAction() {
         return;
     }
 
-    // Green perk completely replaces sword.
     if (
         me.greenLevel > 0
     ) {
@@ -940,7 +1008,6 @@ function performMeleeAttack() {
         lastMeleeTime <
         MELEE_COOLDOWN
     ) {
-
         return;
     }
 
@@ -1161,7 +1228,7 @@ function shootGreenFireball() {
     let velocityY =
         0;
 
-    // 25% chance to home toward nearest player.
+    // 25% chance to aim at nearest player.
     const homingShot =
         Math.random() < 0.25;
 
@@ -1373,12 +1440,10 @@ function updateFireballs() {
             continue;
         }
 
-        // Only owner decides collisions.
         if (
             fireball.ownerId !==
             myId
         ) {
-
             continue;
         }
 
@@ -1743,7 +1808,6 @@ function updatePlayer() {
         }
     }
 
-    // Falling off map does not count as a combat death.
     if (
         me.y >
         canvas.height +
@@ -2195,7 +2259,6 @@ function draw() {
         canvas.height
     );
 
-    // Background
     ctx.fillStyle =
         "#11111b";
 
@@ -2206,7 +2269,7 @@ function draw() {
         canvas.height
     );
 
-    // Platforms
+    // PLATFORMS
     ctx.fillStyle =
         "#dddddd";
 
@@ -2223,7 +2286,7 @@ function draw() {
         );
     }
 
-    // Powerups
+    // POWERUPS
     for (
         const id in powerups
     ) {
@@ -2233,7 +2296,7 @@ function draw() {
         );
     }
 
-    // Players
+    // PLAYERS
     for (
         const id in players
     ) {
@@ -2250,7 +2313,6 @@ function draw() {
                 ? 0.25
                 : 1;
 
-        // SAME ORIGINAL CUBE
         ctx.fillStyle =
             player.color ||
             "#ffffff";
@@ -2262,7 +2324,6 @@ function draw() {
             PLAYER_SIZE
         );
 
-        // Eye only
         drawEye(
             player
         );
@@ -2270,7 +2331,6 @@ function draw() {
         ctx.globalAlpha =
             1;
 
-        // YOU
         if (
             id === myId
         ) {
@@ -2288,7 +2348,6 @@ function draw() {
             );
         }
 
-        // Health bar
         const maxHealth =
             player.maxHealth ||
             BASE_MAX_HEALTH;
@@ -2326,7 +2385,6 @@ function draw() {
             3
         );
 
-        // Sword only if no green perk.
         const swing =
             meleeSwings[id];
 
@@ -2358,7 +2416,7 @@ function draw() {
         }
     }
 
-    // Fireballs
+    // FIREBALLS
     for (
         const fireball
         of fireballs
@@ -2486,7 +2544,7 @@ function draw() {
     }
 
     // =================================================
-    // UPGRADE HUD
+    // POWERUP HUD
     // =================================================
 
     if (
@@ -2498,10 +2556,10 @@ function draw() {
             "rgba(0,0,0,0.76)";
 
         ctx.fillRect(
-            585,
+            570,
             10,
-            203,
-            112
+            218,
+            132
         );
 
         ctx.fillStyle =
@@ -2512,7 +2570,7 @@ function draw() {
 
         ctx.fillText(
             "POWERUPS",
-            600,
+            585,
             31
         );
 
@@ -2538,7 +2596,7 @@ function draw() {
             "Health: +" +
                 bonusHearts +
                 " hearts",
-            600,
+            585,
             53
         );
 
@@ -2576,16 +2634,45 @@ function draw() {
                     me.dashLevel +
                     ": " +
                     dashText,
-                600,
+                585,
                 74
+            );
+
+            // Show dash distance bonus.
+            const distanceUpgradeCount =
+                Math.min(
+                    Math.max(
+                        me.dashLevel - 1,
+                        0
+                    ),
+                    MAX_DASH_DISTANCE_UPGRADES
+                );
+
+            const distancePercent =
+                100 +
+                distanceUpgradeCount *
+                    25;
+
+            ctx.fillText(
+                "Dash distance: " +
+                    distancePercent +
+                    "%",
+                585,
+                94
             );
 
         } else {
 
             ctx.fillText(
                 "Dash: locked",
-                600,
+                585,
                 74
+            );
+
+            ctx.fillText(
+                "Dash distance: locked",
+                585,
+                94
             );
         }
 
@@ -2623,22 +2710,22 @@ function draw() {
                     me.greenLevel +
                     ": " +
                     greenText,
-                600,
-                95
+                585,
+                116
             );
 
         } else {
 
             ctx.fillText(
                 "Green Fireball: locked",
-                600,
-                95
+                585,
+                116
             );
         }
     }
 
     // =================================================
-    // CHARGE BAR
+    // FIREBALL CHARGE BAR
     // =================================================
 
     if (
@@ -2761,7 +2848,7 @@ function draw() {
     }
 
     // =================================================
-    // DEATH
+    // DEATH SCREEN
     // =================================================
 
     if (
@@ -2823,6 +2910,7 @@ function draw() {
             );
 
         respawnButton = {
+
             x:
                 canvas.width / 2 -
                 105,
