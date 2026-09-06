@@ -45,6 +45,45 @@
             height: auto;
         }
 
+        .other-games {
+            margin: 25px auto 40px auto;
+        }
+
+        .other-games-title {
+            font-size: 16px;
+            color: #aaa;
+            margin-bottom: 12px;
+        }
+
+        .bobs-run-button {
+            display: inline-block;
+
+            padding: 13px 26px;
+
+            background: #ffffff;
+            color: #15131d;
+
+            border: 3px solid #ffffff;
+            border-radius: 8px;
+
+            font-size: 18px;
+            font-weight: bold;
+
+            text-decoration: none;
+
+            transition:
+                background 0.15s ease,
+                color 0.15s ease,
+                transform 0.15s ease;
+        }
+
+        .bobs-run-button:hover {
+            background: #15131d;
+            color: #ffffff;
+
+            transform: scale(1.05);
+        }
+
     </style>
 
 </head>
@@ -70,7 +109,7 @@
         |
         Hold SPACE = Fireball
         |
-        Powerups heal you to full
+        Collect Powerups = Get Stronger
     </p>
 
     <p>
@@ -82,6 +121,27 @@
         width="800"
         height="600">
     </canvas>
+
+
+    <!-- =========================================
+         OTHER GAMES
+         ========================================= -->
+
+    <div class="other-games">
+
+        <div class="other-games-title">
+            MORE FROM BOB'S GAME LOCKER
+        </div>
+
+        <a
+            class="bobs-run-button"
+            href="https://bobs-run.bobsgamelocker.com/"
+        >
+            🏁 PLAY BOB'S RUN
+        </a>
+
+    </div>
+
 
     <script src="/socket.io/socket.io.js"></script>
 
