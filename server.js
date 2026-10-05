@@ -42,7 +42,8 @@ const SPIKE_ACTIVE_TIME =
 const SPIKE_COOLDOWN =
     60 * 1000;
 
-const SPIKE_DAMAGE = 1;
+// 2 DAMAGE = ONE WHOLE HEART
+const SPIKE_DAMAGE = 2;
 
 const SPIKE_HEIGHT = 18;
 
@@ -835,10 +836,6 @@ function givePowerupToPlayer(
 
     // =================================================
     // SPIKES
-    //
-    // Repeated pickups do not stack.
-    // Once unlocked, the player has the ability
-    // until death.
     // =================================================
 
     if (
@@ -962,9 +959,6 @@ function removeSpike(
     delete activeSpikes[
         spikeId
     ];
-
-    // Remove any saved contacts
-    // involving this spike.
 
     for (
         const contact of
@@ -1137,9 +1131,6 @@ function updateMapSize() {
 
     clearActiveGoldControl();
 
-    // Platforms are about to change,
-    // so all active spikes disappear.
-
     clearAllSpikes();
 
     mapWidth =
@@ -1243,9 +1234,6 @@ function killPlayer(
         pauseGoldControl();
     }
 
-    // Any spikes belonging to the dead
-    // player disappear immediately.
-
     removeSpikesOwnedBy(
         playerId
     );
@@ -1258,14 +1246,7 @@ function killPlayer(
         Date.now() +
         5000;
 
-    // Death drops exactly one
-    // random powerup.
-    //
-    // This can now be:
-    // Health
-    // Dash
-    // Green Fireball
-    // Spikes
+    // Death drops exactly one random powerup.
 
     spawnPowerup(
         randomPowerupType()
@@ -1494,8 +1475,8 @@ setInterval(
                     touching
                 ) {
 
-                    // Only damage when the player
-                    // first touches/enters the spikes.
+                    // ONE WHOLE HEART
+                    // when enemy first touches spikes.
 
                     if (
                         !spikeContacts.has(
@@ -1516,10 +1497,9 @@ setInterval(
 
                 } else {
 
-                    // Player left the spikes.
-                    //
-                    // If they touch them again,
-                    // they can take another hit.
+                    // If they leave and touch
+                    // again, they can take
+                    // another whole heart.
 
                     spikeContacts.delete(
                         contactKey
@@ -1710,9 +1690,6 @@ setInterval(
 
         clearActiveGoldControl();
 
-        // Old platforms are disappearing,
-        // so spikes disappear too.
-
         clearAllSpikes();
 
         platforms =
@@ -1880,8 +1857,6 @@ io.on(
                 const now =
                     Date.now();
 
-                // Ability is still cooling down.
-
                 if (
                     now <
                     (
@@ -1892,9 +1867,8 @@ io.on(
                     return;
                 }
 
-                // Must actually be standing on
-                // a floating platform.
-                //
+                // Must be standing on a
+                // floating platform.
                 // Ground does not count.
 
                 const platform =
@@ -1908,10 +1882,6 @@ io.on(
                     return;
                 }
 
-                // Remove an old spike belonging
-                // to this player if one somehow
-                // still exists.
-
                 removeSpikesOwnedBy(
                     socket.id
                 );
@@ -1924,12 +1894,8 @@ io.on(
                     now +
                     SPIKE_ACTIVE_TIME;
 
-                // Cooldown starts immediately
-                // when activated.
-                //
-                // 0-30 seconds = spikes active.
-                // 30-60 seconds = cooldown only.
-                // At 60 seconds = ready again.
+                // 60-second cooldown begins
+                // when spikes are activated.
 
                 player.spikeReadyAt =
                     now +
@@ -1948,8 +1914,6 @@ io.on(
                     x:
                         platform.x,
 
-                    // This is the TOP of
-                    // the platform.
                     y:
                         platform.y,
 
@@ -2280,8 +2244,6 @@ io.on(
 
         // =================================================
         // PICKUP POWERUP
-        //
-        // Picking up a powerup does NOT full-heal.
         // =================================================
 
         socket.on(
@@ -2461,9 +2423,6 @@ io.on(
 
                     pauseGoldControl();
                 }
-
-                // Remove spikes belonging
-                // to disconnected player.
 
                 removeSpikesOwnedBy(
                     socket.id
