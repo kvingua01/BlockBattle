@@ -33,7 +33,6 @@ const LARGE_MAP_PLAYER_COUNT = 6;
 const PLATFORM_CHANGE_TIME =
     10 * 60 * 1000;
 
-// Gold platform now requires 15 TOTAL seconds.
 const GOLD_PLATFORM_TIME =
     15 * 1000;
 
@@ -65,11 +64,7 @@ let platforms = [];
 // =====================================================
 
 let goldControllerId = null;
-
 let goldControlStartedAt = 0;
-
-// Saves each player's accumulated
-// gold-platform time.
 let goldSavedProgress = {};
 
 // =====================================================
@@ -233,7 +228,6 @@ function generatePlatforms() {
 
     let platformId = 0;
 
-    // GROUND
     newPlatforms.push(
         {
             id:
@@ -255,10 +249,6 @@ function generatePlatforms() {
                 false
         }
     );
-
-    // =================================================
-    // NORMAL MAP
-    // =================================================
 
     if (
         mapWidth ===
@@ -407,10 +397,6 @@ function generatePlatforms() {
 
     } else {
 
-        // =================================================
-        // LARGE MAP
-        // =================================================
-
         const rows = [
             1090,
             1010,
@@ -517,8 +503,9 @@ function generatePlatforms() {
         );
     }
 
-    // EXACTLY ONE RANDOM GOLD PLATFORM
+    // Exactly one random gold platform.
     // Ground cannot be gold.
+
     if (
         newPlatforms.length > 1
     ) {
@@ -727,6 +714,11 @@ function spawnPowerup(
 
 // =====================================================
 // GIVE POWERUP
+//
+// IMPORTANT:
+// POWERUPS DO NOT HEAL TO FULL.
+//
+// Healing to full happens when you KILL another player.
 // =====================================================
 
 function givePowerupToPlayer(
@@ -744,14 +736,10 @@ function givePowerupToPlayer(
         return;
     }
 
-    // =================================================
-    // HEALTH POWERUP
-    //
-    // Adds 2 maximum hearts.
-    // Also gives 2 hearts of CURRENT health.
-    //
-    // DOES NOT heal to full.
-    // =================================================
+    // HEALTH POWERUP:
+    // +2 maximum hearts.
+    // Also adds those newly gained hearts
+    // to current health, but DOES NOT full-heal.
 
     if (
         type === "health"
@@ -770,8 +758,6 @@ function givePowerupToPlayer(
             player.maxHealth -
             oldMaxHealth;
 
-        // Give up to 2 hearts of health,
-        // but never exceed maximum health.
         player.health =
             Math.min(
                 player.maxHealth,
@@ -780,11 +766,8 @@ function givePowerupToPlayer(
             );
     }
 
-    // =================================================
-    // DASH
-    //
-    // NO HEALTH RESTORED.
-    // =================================================
+    // DASH POWERUP:
+    // Upgrade only. No healing.
 
     if (
         type === "dash"
@@ -797,11 +780,8 @@ function givePowerupToPlayer(
             ) + 1;
     }
 
-    // =================================================
-    // GREEN FIREBALL
-    //
-    // NO HEALTH RESTORED.
-    // =================================================
+    // GREEN FIREBALL:
+    // Upgrade only. No healing.
 
     if (
         type ===
@@ -1004,7 +984,8 @@ function updateMapSize() {
 // =====================================================
 
 function killPlayer(
-    playerId
+    playerId,
+    killerId
 ) {
 
     const player =
@@ -1035,17 +1016,76 @@ function killPlayer(
 
     // Death drops exactly one random
     // Health / Dash / Green powerup.
+
     spawnPowerup(
         randomPowerupType()
     );
 
-    // Lose upgrades after death.
+    // Dead player loses upgrades.
+
     player.maxHealth =
         BASE_MAX_HEALTH;
 
     player.dashLevel = 0;
 
     player.greenLevel = 0;
+
+
+    // =================================================
+    // KILL REWARD
+    //
+    // THIS IS THE NEW HEALING MECHANIC.
+    //
+    // If another living player caused the death,
+    // that player immediately heals to FULL.
+    //
+    // Their current max health is respected.
+    // Example:
+    //
+    // 10-heart max -> heal to 10 hearts.
+    // 16-heart max -> heal to 16 hearts.
+    //
+    // Picking up the dropped powerup does NOT heal.
+    // =================================================
+
+    if (
+        killerId &&
+        killerId !== playerId
+    ) {
+
+        const killer =
+            players[killerId];
+
+        if (
+            killer &&
+            !killer.dead
+        ) {
+
+            killer.health =
+                killer.maxHealth;
+
+            io.emit(
+                "playerHealthChanged",
+                {
+                    id:
+                        killerId,
+
+                    health:
+                        killer.health,
+
+                    maxHealth:
+                        killer.maxHealth,
+
+                    dead:
+                        false,
+
+                    respawnAllowedAt:
+                        killer.respawnAllowedAt
+                }
+            );
+        }
+    }
+
 
     io.emit(
         "playerPowerupChanged",
@@ -1083,9 +1123,18 @@ function killPlayer(
     );
 }
 
+
+// =====================================================
+// DAMAGE PLAYER
+//
+// attackerId tells the server WHO caused the damage.
+// This lets the server know who earned the kill.
+// =====================================================
+
 function damagePlayer(
     playerId,
-    amount
+    amount,
+    attackerId
 ) {
 
     const player =
@@ -1106,7 +1155,8 @@ function damagePlayer(
     ) {
 
         killPlayer(
-            playerId
+            playerId,
+            attackerId
         );
 
         return;
@@ -1171,8 +1221,6 @@ setInterval(
             }
         }
 
-        // Nobody or more than one player:
-        // pause progress but SAVE it.
         if (
             standingPlayers.length !== 1
         ) {
@@ -1255,19 +1303,11 @@ setInterval(
             }
         );
 
-        // =================================================
-        // 15 TOTAL SECONDS = RANDOM POWERUP
-        // =================================================
-
         if (
             totalTime >=
             GOLD_PLATFORM_TIME
         ) {
 
-            // Can STILL be:
-            // Health
-            // Dash
-            // Green Fireball
             const rewardType =
                 randomPowerupType();
 
@@ -1287,14 +1327,10 @@ setInterval(
                 }
             );
 
-            // Reward earned:
-            // reset saved platform time.
             goldSavedProgress[
                 solePlayerId
             ] = 0;
 
-            // Player can remain on platform
-            // and begin another 15 seconds.
             goldControlStartedAt =
                 Date.now();
 
@@ -1565,9 +1601,16 @@ io.on(
                     return;
                 }
 
+                // Normal fireball:
+                // 1 full heart damage.
+                //
+                // socket.id is passed as attackerId
+                // so a killing hit heals the attacker.
+
                 damagePlayer(
                     data.targetId,
-                    2
+                    2,
+                    socket.id
                 );
             }
         );
@@ -1620,9 +1663,15 @@ io.on(
                     return;
                 }
 
+                // Green fireball:
+                // half-heart damage.
+                //
+                // socket.id identifies the killer.
+
                 damagePlayer(
                     data.targetId,
-                    1
+                    1,
+                    socket.id
                 );
 
                 const direction =
@@ -1699,9 +1748,15 @@ io.on(
                     return;
                 }
 
+                // Sword:
+                // half-heart damage.
+                //
+                // socket.id identifies the killer.
+
                 damagePlayer(
                     data.targetId,
-                    1
+                    1,
+                    socket.id
                 );
 
                 io.to(
@@ -1723,6 +1778,9 @@ io.on(
 
         // =================================================
         // PICKUP POWERUP
+        //
+        // IMPORTANT:
+        // PICKING UP A POWERUP DOES NOT FULL-HEAL.
         // =================================================
 
         socket.on(
@@ -1773,7 +1831,6 @@ io.on(
                     return;
                 }
 
-                // NO automatic full heal.
                 givePowerupToPlayer(
                     socket.id,
                     powerup.type
