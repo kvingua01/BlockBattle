@@ -9,51 +9,6 @@ const ctx =
     canvas.getContext("2d");
 
 // =====================================================
-// SIDE HUDS - OUTSIDE THE GAME MAP
-// =====================================================
-
-const gameLayout = document.createElement("div");
-gameLayout.id = "gameLayout";
-
-const healthCanvas = document.createElement("canvas");
-healthCanvas.id = "healthCanvas";
-healthCanvas.width = 295;
-healthCanvas.height = 145;
-
-const powerupCanvas = document.createElement("canvas");
-powerupCanvas.id = "powerupCanvas";
-powerupCanvas.width = 250;
-powerupCanvas.height = 155;
-
-const healthCtx = healthCanvas.getContext("2d");
-const powerupCtx = powerupCanvas.getContext("2d");
-
-canvas.parentNode.insertBefore(gameLayout, canvas);
-gameLayout.appendChild(healthCanvas);
-gameLayout.appendChild(canvas);
-gameLayout.appendChild(powerupCanvas);
-
-gameLayout.style.display = "flex";
-gameLayout.style.justifyContent = "center";
-gameLayout.style.alignItems = "flex-start";
-gameLayout.style.gap = "12px";
-gameLayout.style.margin = "15px auto 20px auto";
-gameLayout.style.width = "max-content";
-gameLayout.style.maxWidth = "100%";
-
-canvas.style.margin = "0";
-
-healthCanvas.style.width = "295px";
-healthCanvas.style.height = "145px";
-healthCanvas.style.flex = "0 0 295px";
-healthCanvas.style.background = "rgba(0,0,0,0.76)";
-
-powerupCanvas.style.width = "250px";
-powerupCanvas.style.height = "155px";
-powerupCanvas.style.flex = "0 0 250px";
-powerupCanvas.style.background = "rgba(0,0,0,0.76)";
-
-// =====================================================
 // SETTINGS
 // =====================================================
 
@@ -127,7 +82,7 @@ let powerupPickupAttempts = {};
 
 let goldControllerId = null;
 let goldProgress = 0;
-let goldRemaining = 15;
+let goldRemaining = 30;
 
 let goldRewardMessage = "";
 let goldRewardMessageUntil = 0;
@@ -314,7 +269,7 @@ socket.on(
 
         goldControllerId = null;
         goldProgress = 0;
-        goldRemaining = 15;
+        goldRemaining = 30;
 
         if (
             data.playerPositions
@@ -362,7 +317,7 @@ socket.on(
 
         goldControllerId = null;
         goldProgress = 0;
-        goldRemaining = 15;
+        goldRemaining = 30;
 
         const me =
             players[myId];
@@ -415,7 +370,7 @@ socket.on(
         goldRemaining =
             data.remaining !== undefined
                 ? data.remaining
-                : 15;
+                : 30;
     }
 );
 
@@ -1049,17 +1004,14 @@ function performDash() {
     socket.emit(
         "playerMove",
         {
-            x:
-                me.x,
-
-            y:
-                me.y,
-
-            facing:
-                facing
+            x: me.x,
+            y: me.y,
+            facing: facing
         }
     );
-}// =====================================================
+}
+
+// =====================================================
 // F ACTION
 // =====================================================
 
@@ -1154,23 +1106,139 @@ function normalShove() {
             NORMAL_SHOVE_RANGE
         ) {
 
-            const direction =
-                dx >= 0
-                    ? 1
-                    : -1;
-
             socket.emit(
-                "shovePlayer",
+                "knockbackPlayer",
                 {
                     targetId: id,
+
                     velocityX:
-                        direction *
+                        (
+                            dx >= 0
+                                ? 1
+                                : -1
+                        ) *
                         NORMAL_KNOCKBACK,
 
-                    velocityY: -3
+                    velocityY: -4
                 }
             );
         }
+    }
+}
+
+// =====================================================
+// MELEE
+// =====================================================
+
+function performMeleeAttack() {
+
+    const me =
+        players[myId];
+
+    if (
+        !me ||
+        me.dead ||
+        (me.greenLevel || 0) > 0
+    ) {
+        return;
+    }
+
+    if (
+        Date.now() -
+        lastMeleeTime <
+        MELEE_COOLDOWN
+    ) {
+        return;
+    }
+
+    lastMeleeTime =
+        Date.now();
+
+    meleeSwings[myId] = {
+        start: Date.now(),
+        facing: facing
+    };
+
+    socket.emit(
+        "meleeSwing",
+        {
+            facing: facing
+        }
+    );
+
+    let closestTarget = null;
+    let closestDistance = Infinity;
+
+    for (
+        const id in players
+    ) {
+
+        if (
+            id === myId
+        ) {
+            continue;
+        }
+
+        const target =
+            players[id];
+
+        if (
+            !target ||
+            target.dead
+        ) {
+            continue;
+        }
+
+        const dx =
+            target.x -
+            me.x;
+
+        const dy =
+            target.y -
+            me.y;
+
+        const distance =
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
+
+        const inFront =
+            facing === 1
+                ? dx >= 0
+                : dx <= 0;
+
+        if (
+            inFront &&
+            distance <=
+            MELEE_RANGE &&
+            distance <
+            closestDistance
+        ) {
+
+            closestDistance =
+                distance;
+
+            closestTarget =
+                id;
+        }
+    }
+
+    if (
+        closestTarget
+    ) {
+
+        socket.emit(
+            "meleeHit",
+            {
+                targetId:
+                    closestTarget,
+
+                velocityX:
+                    facing *
+                    MELEE_KNOCKBACK
+            }
+        );
     }
 }
 
@@ -1190,29 +1258,43 @@ function shootNormalFireball() {
         return;
     }
 
+    const fireball = {
+
+        id:
+            myId +
+            "-normal-" +
+            Date.now() +
+            "-" +
+            Math.random(),
+
+        ownerId: myId,
+
+        type: "normal",
+
+        x:
+            me.x +
+            PLAYER_SIZE / 2,
+
+        y:
+            me.y +
+            PLAYER_SIZE / 2,
+
+        velocityX:
+            facing *
+            FIREBALL_SPEED,
+
+        velocityY: 0,
+
+        radius: 10
+    };
+
+    fireballs.push(
+        fireball
+    );
+
     socket.emit(
         "shootFireball",
-        {
-            x:
-                me.x +
-                PLAYER_SIZE / 2,
-
-            y:
-                me.y +
-                PLAYER_SIZE / 2,
-
-            velocityX:
-                facing *
-                FIREBALL_SPEED,
-
-            velocityY: 0,
-
-            facing:
-                facing,
-
-            type:
-                "normal"
-        }
+        fireball
     );
 }
 
@@ -1253,14 +1335,12 @@ function shootGreenFireball() {
 
     let velocityY = 0;
 
-    // 25% chance to aim at nearest living player
     if (
         Math.random() < 0.25
     ) {
 
         let nearestPlayer = null;
-        let nearestDistance =
-            Infinity;
+        let nearestDistance = Infinity;
 
         for (
             const id in players
@@ -1283,24 +1363,12 @@ function shootGreenFireball() {
             }
 
             const dx =
-                (
-                    target.x +
-                    PLAYER_SIZE / 2
-                ) -
-                (
-                    me.x +
-                    PLAYER_SIZE / 2
-                );
+                target.x -
+                me.x;
 
             const dy =
-                (
-                    target.y +
-                    PLAYER_SIZE / 2
-                ) -
-                (
-                    me.y +
-                    PLAYER_SIZE / 2
-                );
+                target.y -
+                me.y;
 
             const distance =
                 Math.sqrt(
@@ -1326,183 +1394,69 @@ function shootGreenFireball() {
         ) {
 
             const dx =
-                (
-                    nearestPlayer.x +
-                    PLAYER_SIZE / 2
-                ) -
-                (
-                    me.x +
-                    PLAYER_SIZE / 2
-                );
+                nearestPlayer.x -
+                me.x;
 
             const dy =
-                (
-                    nearestPlayer.y +
-                    PLAYER_SIZE / 2
-                ) -
-                (
-                    me.y +
-                    PLAYER_SIZE / 2
-                );
+                nearestPlayer.y -
+                me.y;
 
-            const distance =
+            const length =
                 Math.sqrt(
                     dx * dx +
                     dy * dy
                 ) || 1;
 
             velocityX =
-                (
-                    dx /
-                    distance
-                ) *
+                dx /
+                length *
                 FIREBALL_SPEED;
 
             velocityY =
-                (
-                    dy /
-                    distance
-                ) *
+                dy /
+                length *
                 FIREBALL_SPEED;
         }
     }
 
+    const fireball = {
+
+        id:
+            myId +
+            "-green-" +
+            Date.now() +
+            "-" +
+            Math.random(),
+
+        ownerId: myId,
+
+        type: "green",
+
+        x:
+            me.x +
+            PLAYER_SIZE / 2,
+
+        y:
+            me.y +
+            PLAYER_SIZE / 2,
+
+        velocityX:
+            velocityX,
+
+        velocityY:
+            velocityY,
+
+        radius: 11
+    };
+
+    fireballs.push(
+        fireball
+    );
+
     socket.emit(
         "shootGreenFireball",
-        {
-            x:
-                me.x +
-                PLAYER_SIZE / 2,
-
-            y:
-                me.y +
-                PLAYER_SIZE / 2,
-
-            velocityX:
-                velocityX,
-
-            velocityY:
-                velocityY,
-
-            facing:
-                facing,
-
-            type:
-                "green"
-        }
+        fireball
     );
-}
-
-// =====================================================
-// MELEE ATTACK
-// =====================================================
-
-function performMeleeAttack() {
-
-    const me =
-        players[myId];
-
-    if (
-        !me ||
-        me.dead ||
-        (me.greenLevel || 0) > 0
-    ) {
-        return;
-    }
-
-    if (
-        Date.now() -
-        lastMeleeTime <
-        MELEE_COOLDOWN
-    ) {
-        return;
-    }
-
-    lastMeleeTime =
-        Date.now();
-
-    socket.emit(
-        "meleeSwing",
-        {
-            facing:
-                facing
-        }
-    );
-
-    for (
-        const id in players
-    ) {
-
-        if (
-            id === myId
-        ) {
-            continue;
-        }
-
-        const target =
-            players[id];
-
-        if (
-            !target ||
-            target.dead
-        ) {
-            continue;
-        }
-
-        const dx =
-            (
-                target.x +
-                PLAYER_SIZE / 2
-            ) -
-            (
-                me.x +
-                PLAYER_SIZE / 2
-            );
-
-        const dy =
-            (
-                target.y +
-                PLAYER_SIZE / 2
-            ) -
-            (
-                me.y +
-                PLAYER_SIZE / 2
-            );
-
-        const distance =
-            Math.sqrt(
-                dx * dx +
-                dy * dy
-            );
-
-        const targetDirection =
-            dx >= 0
-                ? 1
-                : -1;
-
-        if (
-            distance <=
-                MELEE_RANGE &&
-            targetDirection ===
-                facing
-        ) {
-
-            socket.emit(
-                "meleeHit",
-                {
-                    targetId:
-                        id,
-
-                    velocityX:
-                        facing *
-                        MELEE_KNOCKBACK,
-
-                    velocityY:
-                        -2
-                }
-            );
-        }
-    }
 }
 
 // =====================================================
@@ -1523,28 +1477,32 @@ function updateFireballs() {
         const fireball =
             fireballs[i];
 
-        if (
-            !fireball
-        ) {
-            continue;
-        }
-
         fireball.x +=
-            fireball.velocityX || 0;
+            fireball.velocityX;
 
         fireball.y +=
             fireball.velocityY || 0;
 
         if (
-            fireball.x <
-                -100 ||
+            fireball.x < -100 ||
             fireball.x >
-                canvas.width + 100 ||
-            fireball.y <
-                -100 ||
+            canvas.width + 100 ||
+            fireball.y < -100 ||
             fireball.y >
-                canvas.height + 100
+            canvas.height + 100
         ) {
+
+            if (
+                fireball.ownerId === myId
+            ) {
+
+                socket.emit(
+                    "removeFireball",
+                    {
+                        id: fireball.id
+                    }
+                );
+            }
 
             fireballs.splice(
                 i,
@@ -1555,8 +1513,7 @@ function updateFireballs() {
         }
 
         if (
-            fireball.ownerId !==
-            myId
+            fireball.ownerId !== myId
         ) {
             continue;
         }
@@ -1566,7 +1523,7 @@ function updateFireballs() {
         ) {
 
             if (
-                id === myId
+                id === fireball.ownerId
             ) {
                 continue;
             }
@@ -1581,55 +1538,86 @@ function updateFireballs() {
                 continue;
             }
 
-            const closestX =
-                Math.max(
-                    target.x,
-                    Math.min(
-                        fireball.x,
-                        target.x +
-                        PLAYER_SIZE
-                    )
-                );
-
-            const closestY =
-                Math.max(
-                    target.y,
-                    Math.min(
-                        fireball.y,
-                        target.y +
-                        PLAYER_SIZE
-                    )
-                );
-
             const dx =
                 fireball.x -
-                closestX;
+                (
+                    target.x +
+                    PLAYER_SIZE / 2
+                );
 
             const dy =
                 fireball.y -
-                closestY;
+                (
+                    target.y +
+                    PLAYER_SIZE / 2
+                );
 
-            const radius =
-                fireball.radius || 8;
+            const distance =
+                Math.sqrt(
+                    dx * dx +
+                    dy * dy
+                );
 
             if (
-                dx * dx +
-                dy * dy <=
-                radius * radius
+                distance <
+                fireball.radius +
+                PLAYER_SIZE / 2
             ) {
 
+                if (
+                    fireball.type ===
+                    "green"
+                ) {
+
+                    socket.emit(
+                        "greenFireballHit",
+                        {
+                            targetId: id,
+
+                            direction:
+                                fireball.velocityX < 0
+                                    ? -1
+                                    : 1
+                        }
+                    );
+
+                } else {
+
+                    socket.emit(
+                        "fireballHit",
+                        {
+                            targetId: id
+                        }
+                    );
+
+                    socket.emit(
+                        "knockbackPlayer",
+                        {
+                            targetId: id,
+
+                            velocityX:
+                                (
+                                    fireball.velocityX >= 0
+                                        ? 1
+                                        : -1
+                                ) *
+                                FIREBALL_KNOCKBACK,
+
+                            velocityY: -10
+                        }
+                    );
+                }
+
                 socket.emit(
-                    "fireballHit",
+                    "removeFireball",
                     {
-                        fireballId:
-                            fireball.id,
-
-                        targetId:
-                            id,
-
-                        type:
-                            fireball.type
+                        id: fireball.id
                     }
+                );
+
+                fireballs.splice(
+                    i,
+                    1
                 );
 
                 break;
@@ -1654,6 +1642,14 @@ function updatePowerupPickup() {
         return;
     }
 
+    const myX =
+        me.x +
+        PLAYER_SIZE / 2;
+
+    const myY =
+        me.y +
+        PLAYER_SIZE / 2;
+
     for (
         const id in powerups
     ) {
@@ -1661,24 +1657,12 @@ function updatePowerupPickup() {
         const powerup =
             powerups[id];
 
-        if (
-            !powerup
-        ) {
-            continue;
-        }
-
         const dx =
-            (
-                me.x +
-                PLAYER_SIZE / 2
-            ) -
+            myX -
             powerup.x;
 
         const dy =
-            (
-                me.y +
-                PLAYER_SIZE / 2
-            ) -
+            myY -
             powerup.y;
 
         const distance =
@@ -1763,15 +1747,13 @@ function updatePlayer() {
         velocityX *= 0.8;
 
         if (
-            Math.abs(velocityX) <
-            0.1
+            Math.abs(velocityX) < 0.1
         ) {
 
             velocityX = 0;
         }
     }
 
-    // HOLD W / UP = CONTINUOUS AUTO-JUMP
     if (
         jumpHeld() &&
         onGround
@@ -1884,14 +1866,9 @@ function updatePlayer() {
     socket.emit(
         "playerMove",
         {
-            x:
-                me.x,
-
-            y:
-                me.y,
-
-            facing:
-                facing
+            x: me.x,
+            y: me.y,
+            facing: facing
         }
     );
 }
@@ -2143,7 +2120,7 @@ function drawSword(
 }
 
 // =====================================================
-// POWERUP DRAWING
+// POWERUPS
 // =====================================================
 
 function drawPowerup(powerup) {
@@ -2159,16 +2136,14 @@ function drawPowerup(powerup) {
     );
 
     if (
-        powerup.type ===
-        "health"
+        powerup.type === "health"
     ) {
 
         ctx.fillStyle =
             "#ff3b30";
 
     } else if (
-        powerup.type ===
-        "dash"
+        powerup.type === "dash"
     ) {
 
         ctx.fillStyle =
@@ -2199,11 +2174,9 @@ function drawPowerup(powerup) {
         "center";
 
     ctx.fillText(
-        powerup.type ===
-            "health"
+        powerup.type === "health"
             ? "+"
-            : powerup.type ===
-                "dash"
+            : powerup.type === "dash"
                 ? "G"
                 : "F",
 
@@ -2213,9 +2186,10 @@ function drawPowerup(powerup) {
 
     ctx.textAlign =
         "left";
-}// =====================================================
+}
+
+// =====================================================
 // FIREBALL CHARGE METER
-// TOP CENTER
 // =====================================================
 
 function drawFireballChargeMeter() {
@@ -2338,7 +2312,6 @@ function drawFireballChargeMeter() {
 
 // =====================================================
 // GOLD PLATFORM METER
-// BELOW FIREBALL
 // =====================================================
 
 function drawGoldStatus() {
@@ -2436,158 +2409,48 @@ function drawGoldStatus() {
 }
 
 // =====================================================
-// LEFT HEALTH HUD
-// OUTSIDE THE GAME MAP
-// EXACT SIZE: 295 x 145
-// =====================================================
-
-function drawHealthHud(me) {
-
-    healthCtx.clearRect(
-        0,
-        0,
-        295,
-        145
-    );
-
-    healthCtx.fillStyle =
-        "rgba(0,0,0,0.76)";
-
-    healthCtx.fillRect(
-        0,
-        0,
-        295,
-        145
-    );
-
-    if (!me) {
-        return;
-    }
-
-    const maxHealth =
-        me.maxHealth ||
-        BASE_MAX_HEALTH;
-
-    const health =
-        me.health ??
-        maxHealth;
-
-    healthCtx.fillStyle =
-        "#ffffff";
-
-    healthCtx.font =
-        "bold 16px Arial";
-
-    healthCtx.fillText(
-        "YOUR HEALTH",
-        13,
-        22
-    );
-
-    const totalHearts =
-        Math.ceil(
-            maxHealth / 2
-        );
-
-    healthCtx.font =
-        "22px Arial";
-
-    for (
-        let heart = 0;
-        heart < totalHearts;
-        heart++
-    ) {
-
-        const row =
-            Math.floor(
-                heart / 10
-            );
-
-        const column =
-            heart % 10;
-
-        const amount =
-            health -
-            heart * 2;
-
-        healthCtx.fillStyle =
-            amount >= 2
-                ? "#ff3030"
-                : amount === 1
-                    ? "#ff9f1c"
-                    : "#666666";
-
-        healthCtx.fillText(
-            amount > 0
-                ? "♥"
-                : "♡",
-
-            13 +
-            column * 23,
-
-            49 +
-            row * 23
-        );
-    }
-
-    healthCtx.fillStyle =
-        "#bbbbbb";
-
-    healthCtx.font =
-        "12px Arial";
-
-    healthCtx.fillText(
-        "F = Sword / Green Fireball",
-        13,
-        106
-    );
-
-    healthCtx.fillText(
-        "G = Dash when unlocked",
-        13,
-        124
-    );
-}
-
-// =====================================================
-// RIGHT POWERUP HUD
-// OUTSIDE THE GAME MAP
-// EXACT SIZE: 250 x 155
+// POWERUP HUD
 // =====================================================
 
 function drawPowerupHud(me) {
 
-    powerupCtx.clearRect(
-        0,
-        0,
-        250,
-        155
-    );
-
-    powerupCtx.fillStyle =
-        "rgba(0,0,0,0.76)";
-
-    powerupCtx.fillRect(
-        0,
-        0,
-        250,
-        155
-    );
-
-    if (!me) {
+    if (
+        !me ||
+        me.dead
+    ) {
         return;
     }
 
-    powerupCtx.fillStyle =
+    const hudWidth = 250;
+    const hudHeight = 155;
+
+    const hudX =
+        canvas.width -
+        hudWidth -
+        12;
+
+    const hudY = 10;
+
+    ctx.fillStyle =
+        "rgba(0,0,0,0.76)";
+
+    ctx.fillRect(
+        hudX,
+        hudY,
+        hudWidth,
+        hudHeight
+    );
+
+    ctx.fillStyle =
         "#ffffff";
 
-    powerupCtx.font =
+    ctx.font =
         "bold 14px Arial";
 
-    powerupCtx.fillText(
+    ctx.fillText(
         "POWERUPS",
-        15,
-        21
+        hudX + 15,
+        hudY + 21
     );
 
     const bonusHearts =
@@ -2602,22 +2465,22 @@ function drawPowerupHud(me) {
             ) / 2
         );
 
-    powerupCtx.font =
+    ctx.font =
         "12px Arial";
 
-    powerupCtx.fillStyle =
+    ctx.fillStyle =
         "#ff6b63";
 
-    powerupCtx.fillText(
+    ctx.fillText(
         "Health: +" +
         bonusHearts +
         " hearts",
 
-        15,
-        45
+        hudX + 15,
+        hudY + 45
     );
 
-    powerupCtx.fillStyle =
+    ctx.fillStyle =
         "#4fd5ff";
 
     if (
@@ -2646,41 +2509,41 @@ function drawPowerupHud(me) {
                 ).toFixed(1) +
                 "s";
 
-        powerupCtx.fillText(
+        ctx.fillText(
             "Dash Lv " +
             me.dashLevel +
             ": " +
             dashStatus,
 
-            15,
-            68
+            hudX + 15,
+            hudY + 68
         );
 
-        powerupCtx.fillText(
+        ctx.fillText(
             "Dash distance: " +
             getDashDistancePercent(me) +
             "%",
 
-            15,
-            88
+            hudX + 15,
+            hudY + 88
         );
 
     } else {
 
-        powerupCtx.fillText(
+        ctx.fillText(
             "Dash: locked",
-            15,
-            68
+            hudX + 15,
+            hudY + 68
         );
 
-        powerupCtx.fillText(
+        ctx.fillText(
             "Dash distance: locked",
-            15,
-            88
+            hudX + 15,
+            hudY + 88
         );
     }
 
-    powerupCtx.fillStyle =
+    ctx.fillStyle =
         "#32ff5a";
 
     if (
@@ -2709,32 +2572,32 @@ function drawPowerupHud(me) {
                 ).toFixed(1) +
                 "s";
 
-        powerupCtx.fillText(
+        ctx.fillText(
             "Green Lv " +
             me.greenLevel +
             ": " +
             greenStatus,
 
-            15,
-            112
+            hudX + 15,
+            hudY + 112
         );
 
     } else {
 
-        powerupCtx.fillText(
+        ctx.fillText(
             "Green Fireball: locked",
-            15,
-            112
+            hudX + 15,
+            hudY + 112
         );
     }
 
-    powerupCtx.fillStyle =
+    ctx.fillStyle =
         "#ffd700";
 
-    powerupCtx.fillText(
-        "Gold platform: 15 sec reward",
-        15,
-        136
+    ctx.fillText(
+        "Gold platform: 30 sec reward",
+        hudX + 15,
+        hudY + 136
     );
 }
 
@@ -2760,10 +2623,6 @@ function draw() {
         canvas.width,
         canvas.height
     );
-
-    // =================================================
-    // PLATFORMS
-    // =================================================
 
     for (
         const platform
@@ -2808,10 +2667,6 @@ function draw() {
         }
     }
 
-    // =================================================
-    // POWERUPS ON MAP
-    // =================================================
-
     for (
         const id in powerups
     ) {
@@ -2820,10 +2675,6 @@ function draw() {
             powerups[id]
         );
     }
-
-    // =================================================
-    // PLAYERS
-    // =================================================
 
     for (
         const id in players
@@ -2936,10 +2787,6 @@ function draw() {
         }
     }
 
-    // =================================================
-    // FIREBALLS
-    // =================================================
-
     for (
         const fireball
         of fireballs
@@ -2986,23 +2833,69 @@ function draw() {
     const me =
         players[myId];
 
-    // =================================================
-    // HUDS ARE NOW OUTSIDE THE MAP
-    // =================================================
+    if (me) {
 
-    drawHealthHud(me);
+        const maxHealth =
+            me.maxHealth ||
+            BASE_MAX_HEALTH;
+
+        const health =
+            me.health ??
+            maxHealth;
+
+        ctx.fillStyle =
+            "rgba(0,0,0,0.76)";
+
+        ctx.fillRect(
+            12,
+            10,
+            295,
+            145
+        );
+
+        ctx.fillStyle =
+            "#ffffff";
+
+        ctx.font =
+            "bold 16px Arial";
+
+        ctx.fillText(
+            "YOUR HEALTH",
+            25,
+            32
+        );
+
+        drawHearts(
+            25,
+            59,
+            health,
+            maxHealth
+        );
+
+        ctx.fillStyle =
+            "#bbbbbb";
+
+        ctx.font =
+            "12px Arial";
+
+        ctx.fillText(
+            "F = Sword / Green Fireball",
+            25,
+            116
+        );
+
+        ctx.fillText(
+            "G = Dash when unlocked",
+            25,
+            134
+        );
+    }
 
     drawPowerupHud(me);
 
-    // FIREBALL CHARGE STILL STAYS INSIDE MAP
     drawFireballChargeMeter();
 
-    // GOLD TIMER STILL STAYS INSIDE MAP
     drawGoldStatus();
-
-    // =================================================
-    // GOLD REWARD MESSAGE
-    // =================================================
 
     if (
         Date.now() <
@@ -3037,10 +2930,6 @@ function draw() {
         ctx.textAlign =
             "left";
     }
-
-    // =================================================
-    // MAP CHANGE MESSAGE
-    // =================================================
 
     if (
         Date.now() <
@@ -3079,10 +2968,6 @@ function draw() {
             "left";
     }
 
-    // =================================================
-    // PLATFORM CHANGE MESSAGE
-    // =================================================
-
     if (
         Date.now() <
         platformMessageUntil
@@ -3116,10 +3001,6 @@ function draw() {
         ctx.textAlign =
             "left";
     }
-
-    // =================================================
-    // DEATH SCREEN
-    // =================================================
 
     if (
         me &&
@@ -3187,11 +3068,9 @@ function draw() {
             y:
                 canvas.height / 2,
 
-            width:
-                210,
+            width: 210,
 
-            height:
-                58,
+            height: 58,
 
             enabled:
                 remainingMs <= 0
@@ -3295,16 +3174,11 @@ canvas.addEventListener(
             );
 
         if (
-            mouseX >=
-                respawnButton.x &&
-
+            mouseX >= respawnButton.x &&
             mouseX <=
                 respawnButton.x +
                 respawnButton.width &&
-
-            mouseY >=
-                respawnButton.y &&
-
+            mouseY >= respawnButton.y &&
             mouseY <=
                 respawnButton.y +
                 respawnButton.height
