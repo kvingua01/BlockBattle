@@ -36,10 +36,21 @@ const PLATFORM_CHANGE_TIME =
 const GOLD_PLATFORM_TIME =
     15 * 1000;
 
+const SPIKE_ACTIVE_TIME =
+    30 * 1000;
+
+const SPIKE_COOLDOWN =
+    60 * 1000;
+
+const SPIKE_DAMAGE = 1;
+
+const SPIKE_HEIGHT = 18;
+
 const POWERUP_TYPES = [
     "health",
     "dash",
-    "greenFireball"
+    "greenFireball",
+    "spike"
 ];
 
 // =====================================================
@@ -58,6 +69,18 @@ let mapHeight =
     NORMAL_MAP_HEIGHT;
 
 let platforms = [];
+
+// =====================================================
+// SPIKE STATE
+// =====================================================
+
+let activeSpikes = {};
+let spikeCounter = 0;
+
+// Used so a player takes damage once when
+// entering spikes, not every server tick.
+let spikeContacts =
+    new Set();
 
 // =====================================================
 // GOLD PLATFORM STATE
@@ -228,6 +251,8 @@ function generatePlatforms() {
 
     let platformId = 0;
 
+    // Ground
+
     newPlatforms.push(
         {
             id:
@@ -249,6 +274,10 @@ function generatePlatforms() {
                 false
         }
     );
+
+    // =================================================
+    // NORMAL MAP
+    // =================================================
 
     if (
         mapWidth ===
@@ -396,6 +425,10 @@ function generatePlatforms() {
         );
 
     } else {
+
+        // =================================================
+        // LARGE MAP
+        // =================================================
 
         const rows = [
             1090,
@@ -629,7 +662,11 @@ function createPlayer(
 
         dashLevel: 0,
 
-        greenLevel: 0
+        greenLevel: 0,
+
+        spikeLevel: 0,
+
+        spikeReadyAt: 0
     };
 }
 
@@ -736,10 +773,9 @@ function givePowerupToPlayer(
         return;
     }
 
-    // HEALTH POWERUP:
-    // +2 maximum hearts.
-    // Also adds those newly gained hearts
-    // to current health, but DOES NOT full-heal.
+    // =================================================
+    // HEALTH
+    // =================================================
 
     if (
         type === "health"
@@ -766,8 +802,9 @@ function givePowerupToPlayer(
             );
     }
 
-    // DASH POWERUP:
-    // Upgrade only. No healing.
+    // =================================================
+    // DASH
+    // =================================================
 
     if (
         type === "dash"
@@ -780,8 +817,9 @@ function givePowerupToPlayer(
             ) + 1;
     }
 
-    // GREEN FIREBALL:
-    // Upgrade only. No healing.
+    // =================================================
+    // GREEN FIREBALL
+    // =================================================
 
     if (
         type ===
@@ -793,6 +831,29 @@ function givePowerupToPlayer(
                 player.greenLevel ||
                 0
             ) + 1;
+    }
+
+    // =================================================
+    // SPIKES
+    //
+    // Repeated pickups do not stack.
+    // Once unlocked, the player has the ability
+    // until death.
+    // =================================================
+
+    if (
+        type === "spike"
+    ) {
+
+        player.spikeLevel = 1;
+
+        if (
+            player.spikeReadyAt ===
+            undefined
+        ) {
+
+            player.spikeReadyAt = 0;
+        }
     }
 
     io.emit(
@@ -811,7 +872,13 @@ function givePowerupToPlayer(
                 player.dashLevel,
 
             greenLevel:
-                player.greenLevel
+                player.greenLevel,
+
+            spikeLevel:
+                player.spikeLevel,
+
+            spikeReadyAt:
+                player.spikeReadyAt
         }
     );
 
@@ -879,6 +946,168 @@ function getSafePlayerPosition() {
 }
 
 // =====================================================
+// SPIKE HELPERS
+// =====================================================
+
+function removeSpike(
+    spikeId
+) {
+
+    if (
+        !activeSpikes[spikeId]
+    ) {
+        return;
+    }
+
+    delete activeSpikes[
+        spikeId
+    ];
+
+    // Remove any saved contacts
+    // involving this spike.
+
+    for (
+        const contact of
+        Array.from(
+            spikeContacts
+        )
+    ) {
+
+        if (
+            contact.startsWith(
+                spikeId + ":"
+            )
+        ) {
+
+            spikeContacts.delete(
+                contact
+            );
+        }
+    }
+
+    io.emit(
+        "spikeRemoved",
+        spikeId
+    );
+}
+
+function removeSpikesOwnedBy(
+    playerId
+) {
+
+    for (
+        const spikeId in
+        activeSpikes
+    ) {
+
+        if (
+            activeSpikes[
+                spikeId
+            ].ownerId ===
+            playerId
+        ) {
+
+            removeSpike(
+                spikeId
+            );
+        }
+    }
+}
+
+function clearAllSpikes() {
+
+    activeSpikes = {};
+
+    spikeContacts.clear();
+
+    io.emit(
+        "clearSpikes"
+    );
+}
+
+function getStandingFloatingPlatform(
+    player
+) {
+
+    if (
+        !player ||
+        player.dead
+    ) {
+        return null;
+    }
+
+    for (
+        const platform of
+        platforms
+    ) {
+
+        // Ground does not count.
+
+        if (
+            platform.y >=
+            mapHeight - 40
+        ) {
+            continue;
+        }
+
+        if (
+            playerIsStandingOnPlatform(
+                player,
+                platform
+            )
+        ) {
+
+            return platform;
+        }
+    }
+
+    return null;
+}
+
+function playerTouchesSpike(
+    player,
+    spike
+) {
+
+    if (
+        !player ||
+        player.dead ||
+        !spike
+    ) {
+        return false;
+    }
+
+    const spikeTop =
+        spike.y -
+        SPIKE_HEIGHT;
+
+    const spikeBottom =
+        spike.y + 2;
+
+    const horizontalOverlap =
+        player.x +
+        PLAYER_SIZE >
+        spike.x &&
+
+        player.x <
+        spike.x +
+        spike.width;
+
+    const verticalOverlap =
+        player.y +
+        PLAYER_SIZE >
+        spikeTop &&
+
+        player.y <
+        spikeBottom;
+
+    return (
+        horizontalOverlap &&
+        verticalOverlap
+    );
+}
+
+// =====================================================
 // MAP SIZE
 // =====================================================
 
@@ -907,6 +1136,11 @@ function updateMapSize() {
     }
 
     clearActiveGoldControl();
+
+    // Platforms are about to change,
+    // so all active spikes disappear.
+
+    clearAllSpikes();
 
     mapWidth =
         desiredWidth;
@@ -974,7 +1208,10 @@ function updateMapSize() {
                 playerPositions,
 
             largeMap:
-                useLarge
+                useLarge,
+
+            activeSpikes:
+                activeSpikes
         }
     );
 }
@@ -1006,6 +1243,13 @@ function killPlayer(
         pauseGoldControl();
     }
 
+    // Any spikes belonging to the dead
+    // player disappear immediately.
+
+    removeSpikesOwnedBy(
+        playerId
+    );
+
     player.health = 0;
 
     player.dead = true;
@@ -1014,14 +1258,20 @@ function killPlayer(
         Date.now() +
         5000;
 
-    // Death drops exactly one random
-    // Health / Dash / Green powerup.
+    // Death drops exactly one
+    // random powerup.
+    //
+    // This can now be:
+    // Health
+    // Dash
+    // Green Fireball
+    // Spikes
 
     spawnPowerup(
         randomPowerupType()
     );
 
-    // Dead player loses upgrades.
+    // Dead player loses all upgrades.
 
     player.maxHealth =
         BASE_MAX_HEALTH;
@@ -1030,22 +1280,15 @@ function killPlayer(
 
     player.greenLevel = 0;
 
+    player.spikeLevel = 0;
+
+    player.spikeReadyAt = 0;
 
     // =================================================
     // KILL REWARD
     //
-    // THIS IS THE NEW HEALING MECHANIC.
-    //
     // If another living player caused the death,
     // that player immediately heals to FULL.
-    //
-    // Their current max health is respected.
-    // Example:
-    //
-    // 10-heart max -> heal to 10 hearts.
-    // 16-heart max -> heal to 16 hearts.
-    //
-    // Picking up the dropped powerup does NOT heal.
     // =================================================
 
     if (
@@ -1086,7 +1329,6 @@ function killPlayer(
         }
     }
 
-
     io.emit(
         "playerPowerupChanged",
         {
@@ -1100,7 +1342,11 @@ function killPlayer(
 
             dashLevel: 0,
 
-            greenLevel: 0
+            greenLevel: 0,
+
+            spikeLevel: 0,
+
+            spikeReadyAt: 0
         }
     );
 
@@ -1123,12 +1369,8 @@ function killPlayer(
     );
 }
 
-
 // =====================================================
 // DAMAGE PLAYER
-//
-// attackerId tells the server WHO caused the damage.
-// This lets the server know who earned the kill.
 // =====================================================
 
 function damagePlayer(
@@ -1181,6 +1423,114 @@ function damagePlayer(
         }
     );
 }
+
+// =====================================================
+// SPIKE COLLISION LOOP
+// =====================================================
+
+setInterval(
+    () => {
+
+        const now =
+            Date.now();
+
+        for (
+            const spikeId in
+            activeSpikes
+        ) {
+
+            const spike =
+                activeSpikes[
+                    spikeId
+                ];
+
+            // Remove after 30 seconds.
+
+            if (
+                now >=
+                spike.expiresAt
+            ) {
+
+                removeSpike(
+                    spikeId
+                );
+
+                continue;
+            }
+
+            for (
+                const playerId in
+                players
+            ) {
+
+                const player =
+                    players[playerId];
+
+                // Owner cannot be damaged
+                // by their own spikes.
+
+                if (
+                    !player ||
+                    player.dead ||
+                    playerId ===
+                    spike.ownerId
+                ) {
+
+                    continue;
+                }
+
+                const contactKey =
+                    spikeId +
+                    ":" +
+                    playerId;
+
+                const touching =
+                    playerTouchesSpike(
+                        player,
+                        spike
+                    );
+
+                if (
+                    touching
+                ) {
+
+                    // Only damage when the player
+                    // first touches/enters the spikes.
+
+                    if (
+                        !spikeContacts.has(
+                            contactKey
+                        )
+                    ) {
+
+                        spikeContacts.add(
+                            contactKey
+                        );
+
+                        damagePlayer(
+                            playerId,
+                            SPIKE_DAMAGE,
+                            spike.ownerId
+                        );
+                    }
+
+                } else {
+
+                    // Player left the spikes.
+                    //
+                    // If they touch them again,
+                    // they can take another hit.
+
+                    spikeContacts.delete(
+                        contactKey
+                    );
+                }
+            }
+        }
+
+    },
+    50
+);
 
 // =====================================================
 // GOLD PLATFORM LOOP
@@ -1360,6 +1710,11 @@ setInterval(
 
         clearActiveGoldControl();
 
+        // Old platforms are disappearing,
+        // so spikes disappear too.
+
+        clearAllSpikes();
+
         platforms =
             generatePlatforms();
 
@@ -1423,7 +1778,10 @@ io.on(
                     platforms,
 
                 largeMap:
-                    shouldUseLargeMap()
+                    shouldUseLargeMap(),
+
+                activeSpikes:
+                    activeSpikes
             }
         );
 
@@ -1435,6 +1793,11 @@ io.on(
         socket.emit(
             "currentPowerups",
             powerups
+        );
+
+        socket.emit(
+            "currentSpikes",
+            activeSpikes
         );
 
         socket.broadcast.emit(
@@ -1490,6 +1853,152 @@ io.on(
 
                         facing:
                             player.facing
+                    }
+                );
+            }
+        );
+
+        // =================================================
+        // ACTIVATE SPIKES
+        // =================================================
+
+        socket.on(
+            "activateSpikes",
+            () => {
+
+                const player =
+                    players[socket.id];
+
+                if (
+                    !player ||
+                    player.dead ||
+                    player.spikeLevel <= 0
+                ) {
+                    return;
+                }
+
+                const now =
+                    Date.now();
+
+                // Ability is still cooling down.
+
+                if (
+                    now <
+                    (
+                        player.spikeReadyAt ||
+                        0
+                    )
+                ) {
+                    return;
+                }
+
+                // Must actually be standing on
+                // a floating platform.
+                //
+                // Ground does not count.
+
+                const platform =
+                    getStandingFloatingPlatform(
+                        player
+                    );
+
+                if (
+                    !platform
+                ) {
+                    return;
+                }
+
+                // Remove an old spike belonging
+                // to this player if one somehow
+                // still exists.
+
+                removeSpikesOwnedBy(
+                    socket.id
+                );
+
+                const spikeId =
+                    "spike-" +
+                    spikeCounter++;
+
+                const expiresAt =
+                    now +
+                    SPIKE_ACTIVE_TIME;
+
+                // Cooldown starts immediately
+                // when activated.
+                //
+                // 0-30 seconds = spikes active.
+                // 30-60 seconds = cooldown only.
+                // At 60 seconds = ready again.
+
+                player.spikeReadyAt =
+                    now +
+                    SPIKE_COOLDOWN;
+
+                const spike = {
+                    id:
+                        spikeId,
+
+                    ownerId:
+                        socket.id,
+
+                    platformId:
+                        platform.id,
+
+                    x:
+                        platform.x,
+
+                    // This is the TOP of
+                    // the platform.
+                    y:
+                        platform.y,
+
+                    width:
+                        platform.width,
+
+                    height:
+                        SPIKE_HEIGHT,
+
+                    expiresAt:
+                        expiresAt,
+
+                    readyAt:
+                        player.spikeReadyAt
+                };
+
+                activeSpikes[
+                    spikeId
+                ] =
+                    spike;
+
+                io.emit(
+                    "spikeActivated",
+                    spike
+                );
+
+                io.emit(
+                    "playerPowerupChanged",
+                    {
+                        id:
+                            socket.id,
+
+                        health:
+                            player.health,
+
+                        maxHealth:
+                            player.maxHealth,
+
+                        dashLevel:
+                            player.dashLevel,
+
+                        greenLevel:
+                            player.greenLevel,
+
+                        spikeLevel:
+                            player.spikeLevel,
+
+                        spikeReadyAt:
+                            player.spikeReadyAt
                     }
                 );
             }
@@ -1603,9 +2112,6 @@ io.on(
 
                 // Normal fireball:
                 // 1 full heart damage.
-                //
-                // socket.id is passed as attackerId
-                // so a killing hit heals the attacker.
 
                 damagePlayer(
                     data.targetId,
@@ -1665,8 +2171,6 @@ io.on(
 
                 // Green fireball:
                 // half-heart damage.
-                //
-                // socket.id identifies the killer.
 
                 damagePlayer(
                     data.targetId,
@@ -1750,8 +2254,6 @@ io.on(
 
                 // Sword:
                 // half-heart damage.
-                //
-                // socket.id identifies the killer.
 
                 damagePlayer(
                     data.targetId,
@@ -1779,8 +2281,7 @@ io.on(
         // =================================================
         // PICKUP POWERUP
         //
-        // IMPORTANT:
-        // PICKING UP A POWERUP DOES NOT FULL-HEAL.
+        // Picking up a powerup does NOT full-heal.
         // =================================================
 
         socket.on(
@@ -1897,6 +2398,10 @@ io.on(
 
                 player.greenLevel = 0;
 
+                player.spikeLevel = 0;
+
+                player.spikeReadyAt = 0;
+
                 player.facing = 1;
 
                 io.emit(
@@ -1924,7 +2429,13 @@ io.on(
                             player.dashLevel,
 
                         greenLevel:
-                            player.greenLevel
+                            player.greenLevel,
+
+                        spikeLevel:
+                            player.spikeLevel,
+
+                        spikeReadyAt:
+                            player.spikeReadyAt
                     }
                 );
             }
@@ -1950,6 +2461,13 @@ io.on(
 
                     pauseGoldControl();
                 }
+
+                // Remove spikes belonging
+                // to disconnected player.
+
+                removeSpikesOwnedBy(
+                    socket.id
+                );
 
                 delete players[
                     socket.id
