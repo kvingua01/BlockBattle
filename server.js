@@ -1,3 +1,4 @@
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -7,44 +8,28 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(
-    express.static(
-        path.join(__dirname, "public")
-    )
-);
+app.use(express.static(path.join(__dirname, "public")));
 
 // =====================================================
 // SETTINGS
 // =====================================================
 
 const PLAYER_SIZE = 30;
-
 const BASE_MAX_HEALTH = 20;
 const ABSOLUTE_MAX_HEALTH = 40;
 
 const NORMAL_MAP_WIDTH = 800;
 const NORMAL_MAP_HEIGHT = 600;
-
 const LARGE_MAP_WIDTH = 1600;
 const LARGE_MAP_HEIGHT = 1200;
-
 const LARGE_MAP_PLAYER_COUNT = 6;
 
-const PLATFORM_CHANGE_TIME =
-    10 * 60 * 1000;
+const PLATFORM_CHANGE_TIME = 10 * 60 * 1000;
+const GOLD_PLATFORM_TIME = 15 * 1000;
 
-const GOLD_PLATFORM_TIME =
-    15 * 1000;
-
-const SPIKE_ACTIVE_TIME =
-    30 * 1000;
-
-const SPIKE_COOLDOWN =
-    60 * 1000;
-
-// 2 DAMAGE = ONE WHOLE HEART
+const SPIKE_ACTIVE_TIME = 30 * 1000;
+const SPIKE_COOLDOWN = 60 * 1000;
 const SPIKE_DAMAGE = 2;
-
 const SPIKE_HEIGHT = 18;
 
 const POWERUP_TYPES = [
@@ -59,33 +44,16 @@ const POWERUP_TYPES = [
 // =====================================================
 
 let players = {};
-
 let powerups = {};
 let powerupCounter = 0;
 
-let mapWidth =
-    NORMAL_MAP_WIDTH;
-
-let mapHeight =
-    NORMAL_MAP_HEIGHT;
-
+let mapWidth = NORMAL_MAP_WIDTH;
+let mapHeight = NORMAL_MAP_HEIGHT;
 let platforms = [];
-
-// =====================================================
-// SPIKE STATE
-// =====================================================
 
 let activeSpikes = {};
 let spikeCounter = 0;
-
-// Used so a player takes damage once when
-// entering spikes, not every server tick.
-let spikeContacts =
-    new Set();
-
-// =====================================================
-// GOLD PLATFORM STATE
-// =====================================================
+let spikeContacts = new Set();
 
 let goldControllerId = null;
 let goldControlStartedAt = 0;
@@ -95,102 +63,69 @@ let goldSavedProgress = {};
 // HELPERS
 // =====================================================
 
-function clamp(
-    value,
-    min,
-    max
-) {
-
-    return Math.max(
-        min,
-        Math.min(
-            max,
-            value
-        )
-    );
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
 }
 
-function randomBetween(
-    min,
-    max
-) {
-
-    return (
-        min +
-        Math.random() *
-        (max - min)
-    );
+function randomBetween(min, max) {
+    return min + Math.random() * (max - min);
 }
 
 function getPlayerCount() {
-
-    return Object.keys(
-        players
-    ).length;
+    return Object.keys(players).length;
 }
 
 function shouldUseLargeMap() {
-
-    return (
-        getPlayerCount() >=
-        LARGE_MAP_PLAYER_COUNT
-    );
+    return getPlayerCount() >= LARGE_MAP_PLAYER_COUNT;
 }
 
 function randomPowerupType() {
-
     return POWERUP_TYPES[
-        Math.floor(
-            Math.random() *
-            POWERUP_TYPES.length
-        )
+        Math.floor(Math.random() * POWERUP_TYPES.length)
     ];
+}
+
+// =====================================================
+// NICKNAMES
+// =====================================================
+
+function cleanNickname(value) {
+    if (typeof value !== "string") {
+        return "PLAYER";
+    }
+
+    const cleaned = value
+        .trim()
+        .replace(/[^a-zA-Z0-9 _-]/g, "")
+        .slice(0, 16)
+        .trim();
+
+    return cleaned || "PLAYER";
 }
 
 // =====================================================
 // GOLD PROGRESS
 // =====================================================
 
-function getSavedGoldTime(
-    playerId
-) {
+function getSavedGoldTime(playerId) {
+    return goldSavedProgress[playerId] || 0;
+}
 
-    return (
-        goldSavedProgress[playerId] ||
-        0
+function setSavedGoldTime(playerId, milliseconds) {
+    goldSavedProgress[playerId] = clamp(
+        milliseconds,
+        0,
+        GOLD_PLATFORM_TIME
     );
 }
 
-function setSavedGoldTime(
-    playerId,
-    milliseconds
-) {
-
-    goldSavedProgress[playerId] =
-        clamp(
-            milliseconds,
-            0,
-            GOLD_PLATFORM_TIME
-        );
-}
-
 function saveCurrentGoldProgress() {
-
-    if (
-        !goldControllerId ||
-        !goldControlStartedAt
-    ) {
+    if (!goldControllerId || !goldControlStartedAt) {
         return;
     }
 
-    const elapsed =
-        Date.now() -
-        goldControlStartedAt;
-
-    const previousSaved =
-        getSavedGoldTime(
-            goldControllerId
-        );
+    const elapsed = Date.now() - goldControlStartedAt;
+    const previousSaved = getSavedGoldTime(goldControllerId);
 
     setSavedGoldTime(
         goldControllerId,
@@ -199,47 +134,33 @@ function saveCurrentGoldProgress() {
 }
 
 function pauseGoldControl() {
-
-    if (
-        goldControllerId
-    ) {
-
+    if (goldControllerId) {
         saveCurrentGoldProgress();
     }
 
     goldControllerId = null;
     goldControlStartedAt = 0;
 
-    io.emit(
-        "goldPlatformStatus",
-        {
-            controllerId: null,
-            progress: 0,
-            remaining: 15
-        }
-    );
+    io.emit("goldPlatformStatus", {
+        controllerId: null,
+        progress: 0,
+        remaining: 15
+    });
 }
 
 function clearActiveGoldControl() {
-
-    if (
-        goldControllerId
-    ) {
-
+    if (goldControllerId) {
         saveCurrentGoldProgress();
     }
 
     goldControllerId = null;
     goldControlStartedAt = 0;
 
-    io.emit(
-        "goldPlatformStatus",
-        {
-            controllerId: null,
-            progress: 0,
-            remaining: 15
-        }
-    );
+    io.emit("goldPlatformStatus", {
+        controllerId: null,
+        progress: 0,
+        remaining: 15
+    });
 }
 
 // =====================================================
@@ -247,156 +168,74 @@ function clearActiveGoldControl() {
 // =====================================================
 
 function generatePlatforms() {
-
     const newPlatforms = [];
-
     let platformId = 0;
 
     // Ground
+    newPlatforms.push({
+        id: "platform-" + platformId++,
+        x: 0,
+        y: mapHeight - 30,
+        width: mapWidth,
+        height: 30,
+        isGold: false
+    });
 
-    newPlatforms.push(
-        {
-            id:
-                "platform-" +
-                platformId++,
-
-            x: 0,
-
-            y:
-                mapHeight - 30,
-
-            width:
-                mapWidth,
-
-            height:
-                30,
-
-            isGold:
-                false
-        }
-    );
-
-    // =================================================
-    // NORMAL MAP
-    // =================================================
-
-    if (
-        mapWidth ===
-        NORMAL_MAP_WIDTH
-    ) {
-
-        const rows = [
-            490,
-            410,
-            330,
-            250,
-            170,
-            90
-        ];
-
+    if (mapWidth === NORMAL_MAP_WIDTH) {
+        const rows = [490, 410, 330, 250, 170, 90];
         let previousStyle = -1;
 
-        for (
-            const y of rows
-        ) {
-
+        for (const y of rows) {
             let style;
 
             do {
+                style = Math.floor(Math.random() * 3);
+            } while (style === previousStyle);
 
-                style =
-                    Math.floor(
-                        Math.random() * 3
-                    );
-
-            } while (
-                style === previousStyle
-            );
-
-            previousStyle =
-                style;
+            previousStyle = style;
 
             const leftPlatform = {
-                id:
-                    "platform-" +
-                    platformId++,
-
-                x:
-                    randomBetween(
-                        35,
-                        150
-                    ),
-
-                y: y,
-
+                id: "platform-" + platformId++,
+                x: randomBetween(35, 150),
+                y,
                 width: 145,
                 height: 20,
-
                 isGold: false
             };
 
             const centerPlatform = {
-                id:
-                    "platform-" +
-                    platformId++,
-
-                x:
-                    randomBetween(
-                        325,
-                        405
-                    ),
-
-                y: y,
-
+                id: "platform-" + platformId++,
+                x: randomBetween(325, 405),
+                y,
                 width: 145,
                 height: 20,
-
                 isGold: false
             };
 
             const rightPlatform = {
-                id:
-                    "platform-" +
-                    platformId++,
-
-                x:
-                    randomBetween(
-                        605,
-                        635
-                    ),
-
-                y: y,
-
+                id: "platform-" + platformId++,
+                x: randomBetween(605, 635),
+                y,
                 width: 145,
                 height: 20,
-
                 isGold: false
             };
 
-            if (
-                style === 0
-            ) {
-
+            if (style === 0) {
                 newPlatforms.push(
                     leftPlatform,
                     rightPlatform
                 );
             }
 
-            if (
-                style === 1
-            ) {
-
+            if (style === 1) {
                 newPlatforms.push(
                     leftPlatform,
                     centerPlatform
                 );
             }
 
-            if (
-                style === 2
-            ) {
-
+            if (style === 2) {
                 newPlatforms.push(
                     centerPlatform,
                     rightPlatform
@@ -404,160 +243,66 @@ function generatePlatforms() {
             }
         }
 
-        newPlatforms.push(
-            {
-                id:
-                    "platform-" +
-                    platformId++,
-
-                x:
-                    randomBetween(
-                        285,
-                        355
-                    ),
-
-                y: 25,
-
-                width: 180,
-                height: 20,
-
-                isGold: false
-            }
-        );
-
+        newPlatforms.push({
+            id: "platform-" + platformId++,
+            x: randomBetween(285, 355),
+            y: 25,
+            width: 180,
+            height: 20,
+            isGold: false
+        });
     } else {
-
-        // =================================================
-        // LARGE MAP
-        // =================================================
-
         const rows = [
-            1090,
-            1010,
-            930,
-            850,
-            770,
-            690,
-            610,
-            530,
-            450,
-            370,
-            290,
-            210,
-            130
+            1090, 1010, 930, 850, 770, 690, 610,
+            530, 450, 370, 290, 210, 130
         ];
 
-        for (
-            const y of rows
-        ) {
+        for (const y of rows) {
+            newPlatforms.push({
+                id: "platform-" + platformId++,
+                x: randomBetween(50, 300),
+                y,
+                width: 180,
+                height: 20,
+                isGold: false
+            });
 
-            newPlatforms.push(
-                {
-                    id:
-                        "platform-" +
-                        platformId++,
+            newPlatforms.push({
+                id: "platform-" + platformId++,
+                x: randomBetween(700, 830),
+                y,
+                width: 180,
+                height: 20,
+                isGold: false
+            });
 
-                    x:
-                        randomBetween(
-                            50,
-                            300
-                        ),
-
-                    y: y,
-
-                    width: 180,
-                    height: 20,
-
-                    isGold: false
-                }
-            );
-
-            newPlatforms.push(
-                {
-                    id:
-                        "platform-" +
-                        platformId++,
-
-                    x:
-                        randomBetween(
-                            700,
-                            830
-                        ),
-
-                    y: y,
-
-                    width: 180,
-                    height: 20,
-
-                    isGold: false
-                }
-            );
-
-            newPlatforms.push(
-                {
-                    id:
-                        "platform-" +
-                        platformId++,
-
-                    x:
-                        randomBetween(
-                            1250,
-                            1370
-                        ),
-
-                    y: y,
-
-                    width: 180,
-                    height: 20,
-
-                    isGold: false
-                }
-            );
+            newPlatforms.push({
+                id: "platform-" + platformId++,
+                x: randomBetween(1250, 1370),
+                y,
+                width: 180,
+                height: 20,
+                isGold: false
+            });
         }
 
-        newPlatforms.push(
-            {
-                id:
-                    "platform-" +
-                    platformId++,
-
-                x:
-                    randomBetween(
-                        650,
-                        760
-                    ),
-
-                y: 45,
-
-                width: 260,
-                height: 20,
-
-                isGold: false
-            }
-        );
+        newPlatforms.push({
+            id: "platform-" + platformId++,
+            x: randomBetween(650, 760),
+            y: 45,
+            width: 260,
+            height: 20,
+            isGold: false
+        });
     }
 
-    // Exactly one random gold platform.
-    // Ground cannot be gold.
+    // One gold platform, never the ground
+    if (newPlatforms.length > 1) {
+        const goldIndex = 1 + Math.floor(
+            Math.random() * (newPlatforms.length - 1)
+        );
 
-    if (
-        newPlatforms.length > 1
-    ) {
-
-        const goldIndex =
-            1 +
-            Math.floor(
-                Math.random() *
-                (
-                    newPlatforms.length -
-                    1
-                )
-            );
-
-        newPlatforms[
-            goldIndex
-        ].isGold =
-            true;
+        newPlatforms[goldIndex].isGold = true;
     }
 
     clearActiveGoldControl();
@@ -565,380 +310,197 @@ function generatePlatforms() {
     return newPlatforms;
 }
 
-platforms =
-    generatePlatforms();
+platforms = generatePlatforms();
 
 // =====================================================
 // GOLD PLATFORM HELPERS
 // =====================================================
 
 function getGoldPlatform() {
-
-    return platforms.find(
-        platform =>
-            platform.isGold
-    );
+    return platforms.find(platform => platform.isGold);
 }
 
-function playerIsStandingOnPlatform(
-    player,
-    platform
-) {
-
-    if (
-        !player ||
-        player.dead ||
-        !platform
-    ) {
+function playerIsStandingOnPlatform(player, platform) {
+    if (!player || player.dead || !platform) {
         return false;
     }
 
-    const playerBottom =
-        player.y +
-        PLAYER_SIZE;
+    const playerBottom = player.y + PLAYER_SIZE;
 
     const horizontalOverlap =
-        player.x +
-        PLAYER_SIZE >
-        platform.x &&
-
-        player.x <
-        platform.x +
-        platform.width;
+        player.x + PLAYER_SIZE > platform.x &&
+        player.x < platform.x + platform.width;
 
     const standingOnTop =
-        Math.abs(
-            playerBottom -
-            platform.y
-        ) <= 6;
+        Math.abs(playerBottom - platform.y) <= 6;
 
-    return (
-        horizontalOverlap &&
-        standingOnTop
-    );
+    return horizontalOverlap && standingOnTop;
 }
 
 // =====================================================
 // CREATE PLAYER
 // =====================================================
 
-function createPlayer(
-    id
-) {
-
+function createPlayer(id) {
     return {
-        id: id,
+        id,
+        nickname: "PLAYER",
 
-        x:
-            randomBetween(
-                60,
-                Math.max(
-                    61,
-                    mapWidth - 90
-                )
-            ),
+        x: randomBetween(
+            60,
+            Math.max(61, mapWidth - 90)
+        ),
 
-        y:
-            mapHeight - 100,
+        y: mapHeight - 100,
 
-        color:
-            `hsl(${
-                Math.floor(
-                    Math.random() *
-                    360
-                )
-            }, 70%, 55%)`,
+        color: `hsl(${
+            Math.floor(Math.random() * 360)
+        }, 70%, 55%)`,
 
         facing: 1,
 
-        health:
-            BASE_MAX_HEALTH,
-
-        maxHealth:
-            BASE_MAX_HEALTH,
+        health: BASE_MAX_HEALTH,
+        maxHealth: BASE_MAX_HEALTH,
 
         dead: false,
-
         respawnAllowedAt: 0,
 
         dashLevel: 0,
-
         greenLevel: 0,
-
         spikeLevel: 0,
-
         spikeReadyAt: 0
     };
 }
 
 // =====================================================
-// POWERUP POSITION
+// POWERUP POSITIONS
 // =====================================================
 
 function getRandomPowerupPosition() {
-
-    const usablePlatforms =
-        platforms.filter(
-            platform =>
-                platform.y <
-                mapHeight - 40
-        );
+    const usablePlatforms = platforms.filter(
+        platform => platform.y < mapHeight - 40
+    );
 
     const platform =
         usablePlatforms[
             Math.floor(
-                Math.random() *
-                usablePlatforms.length
+                Math.random() * usablePlatforms.length
             )
-        ] ||
-        platforms[0];
+        ] || platforms[0];
 
     return {
-        x:
-            clamp(
-                randomBetween(
-                    platform.x + 20,
-                    platform.x +
-                    platform.width - 20
-                ),
-                20,
-                mapWidth - 20
+        x: clamp(
+            randomBetween(
+                platform.x + 20,
+                platform.x + platform.width - 20
             ),
+            20,
+            mapWidth - 20
+        ),
 
-        y:
-            platform.y - 18
+        y: platform.y - 18
     };
 }
 
-// =====================================================
-// SPAWN POWERUP
-// =====================================================
-
-function spawnPowerup(
-    type
-) {
-
-    const position =
-        getRandomPowerupPosition();
-
-    const id =
-        "powerup-" +
-        powerupCounter++;
+function spawnPowerup(type) {
+    const position = getRandomPowerupPosition();
+    const id = "powerup-" + powerupCounter++;
 
     const powerup = {
-        id: id,
-
-        type:
-            type ||
-            randomPowerupType(),
-
-        x:
-            position.x,
-
-        y:
-            position.y
+        id,
+        type: type || randomPowerupType(),
+        x: position.x,
+        y: position.y
     };
 
-    powerups[id] =
-        powerup;
+    powerups[id] = powerup;
 
-    io.emit(
-        "powerupSpawned",
-        powerup
-    );
+    io.emit("powerupSpawned", powerup);
 
     return powerup;
 }
 
 // =====================================================
 // GIVE POWERUP
-//
-// IMPORTANT:
-// POWERUPS DO NOT HEAL TO FULL.
-//
-// Healing to full happens when you KILL another player.
+// Powerups do not heal to full.
+// Killing another player heals to full.
 // =====================================================
 
-function givePowerupToPlayer(
-    playerId,
-    type
-) {
+function givePowerupToPlayer(playerId, type) {
+    const player = players[playerId];
 
-    const player =
-        players[playerId];
-
-    if (
-        !player ||
-        player.dead
-    ) {
+    if (!player || player.dead) {
         return;
     }
 
-    // =================================================
-    // HEALTH
-    // =================================================
+    if (type === "health") {
+        const oldMaxHealth = player.maxHealth;
 
-    if (
-        type === "health"
-    ) {
+        player.maxHealth = Math.min(
+            ABSOLUTE_MAX_HEALTH,
+            player.maxHealth + 4
+        );
 
-        const oldMaxHealth =
-            player.maxHealth;
+        const added = player.maxHealth - oldMaxHealth;
 
-        player.maxHealth =
-            Math.min(
-                ABSOLUTE_MAX_HEALTH,
-                player.maxHealth + 4
-            );
-
-        const maxHealthActuallyAdded =
-            player.maxHealth -
-            oldMaxHealth;
-
-        player.health =
-            Math.min(
-                player.maxHealth,
-                player.health +
-                maxHealthActuallyAdded
-            );
+        player.health = Math.min(
+            player.maxHealth,
+            player.health + added
+        );
     }
 
-    // =================================================
-    // DASH
-    // =================================================
-
-    if (
-        type === "dash"
-    ) {
-
-        player.dashLevel =
-            (
-                player.dashLevel ||
-                0
-            ) + 1;
+    if (type === "dash") {
+        player.dashLevel = (player.dashLevel || 0) + 1;
     }
 
-    // =================================================
-    // GREEN FIREBALL
-    // =================================================
-
-    if (
-        type ===
-        "greenFireball"
-    ) {
-
-        player.greenLevel =
-            (
-                player.greenLevel ||
-                0
-            ) + 1;
+    if (type === "greenFireball") {
+        player.greenLevel = (player.greenLevel || 0) + 1;
     }
 
-    // =================================================
-    // SPIKES
-    // =================================================
-
-    if (
-        type === "spike"
-    ) {
-
+    if (type === "spike") {
         player.spikeLevel = 1;
 
-        if (
-            player.spikeReadyAt ===
-            undefined
-        ) {
-
+        if (player.spikeReadyAt === undefined) {
             player.spikeReadyAt = 0;
         }
     }
 
-    io.emit(
-        "playerPowerupChanged",
-        {
-            id:
-                playerId,
+    io.emit("playerPowerupChanged", {
+        id: playerId,
+        health: player.health,
+        maxHealth: player.maxHealth,
+        dashLevel: player.dashLevel,
+        greenLevel: player.greenLevel,
+        spikeLevel: player.spikeLevel,
+        spikeReadyAt: player.spikeReadyAt
+    });
 
-            health:
-                player.health,
-
-            maxHealth:
-                player.maxHealth,
-
-            dashLevel:
-                player.dashLevel,
-
-            greenLevel:
-                player.greenLevel,
-
-            spikeLevel:
-                player.spikeLevel,
-
-            spikeReadyAt:
-                player.spikeReadyAt
-        }
-    );
-
-    io.emit(
-        "playerHealthChanged",
-        {
-            id:
-                playerId,
-
-            health:
-                player.health,
-
-            maxHealth:
-                player.maxHealth,
-
-            dead:
-                player.dead,
-
-            respawnAllowedAt:
-                player.respawnAllowedAt
-        }
-    );
+    io.emit("playerHealthChanged", {
+        id: playerId,
+        health: player.health,
+        maxHealth: player.maxHealth,
+        dead: player.dead,
+        respawnAllowedAt: player.respawnAllowedAt
+    });
 }
 
-// =====================================================
-// REPOSITION POWERUPS
-// =====================================================
-
 function repositionPowerups() {
+    for (const id in powerups) {
+        const position = getRandomPowerupPosition();
 
-    for (
-        const id in powerups
-    ) {
-
-        const position =
-            getRandomPowerupPosition();
-
-        powerups[id].x =
-            position.x;
-
-        powerups[id].y =
-            position.y;
+        powerups[id].x = position.x;
+        powerups[id].y = position.y;
     }
 }
 
-// =====================================================
-// SAFE PLAYER POSITION
-// =====================================================
-
 function getSafePlayerPosition() {
-
     return {
-        x:
-            randomBetween(
-                60,
-                Math.max(
-                    61,
-                    mapWidth - 90
-                )
-            ),
+        x: randomBetween(
+            60,
+            Math.max(61, mapWidth - 90)
+        ),
 
-        y:
-            mapHeight - 100
+        y: mapHeight - 100
     };
 }
 
@@ -946,111 +508,48 @@ function getSafePlayerPosition() {
 // SPIKE HELPERS
 // =====================================================
 
-function removeSpike(
-    spikeId
-) {
-
-    if (
-        !activeSpikes[spikeId]
-    ) {
+function removeSpike(spikeId) {
+    if (!activeSpikes[spikeId]) {
         return;
     }
 
-    delete activeSpikes[
-        spikeId
-    ];
+    delete activeSpikes[spikeId];
 
-    for (
-        const contact of
-        Array.from(
-            spikeContacts
-        )
-    ) {
-
-        if (
-            contact.startsWith(
-                spikeId + ":"
-            )
-        ) {
-
-            spikeContacts.delete(
-                contact
-            );
+    for (const contact of Array.from(spikeContacts)) {
+        if (contact.startsWith(spikeId + ":")) {
+            spikeContacts.delete(contact);
         }
     }
 
-    io.emit(
-        "spikeRemoved",
-        spikeId
-    );
+    io.emit("spikeRemoved", spikeId);
 }
 
-function removeSpikesOwnedBy(
-    playerId
-) {
-
-    for (
-        const spikeId in
-        activeSpikes
-    ) {
-
-        if (
-            activeSpikes[
-                spikeId
-            ].ownerId ===
-            playerId
-        ) {
-
-            removeSpike(
-                spikeId
-            );
+function removeSpikesOwnedBy(playerId) {
+    for (const spikeId in activeSpikes) {
+        if (activeSpikes[spikeId].ownerId === playerId) {
+            removeSpike(spikeId);
         }
     }
 }
 
 function clearAllSpikes() {
-
     activeSpikes = {};
-
     spikeContacts.clear();
 
-    io.emit(
-        "clearSpikes"
-    );
+    io.emit("clearSpikes");
 }
 
-function getStandingFloatingPlatform(
-    player
-) {
-
-    if (
-        !player ||
-        player.dead
-    ) {
+function getStandingFloatingPlatform(player) {
+    if (!player || player.dead) {
         return null;
     }
 
-    for (
-        const platform of
-        platforms
-    ) {
-
-        // Ground does not count.
-
-        if (
-            platform.y >=
-            mapHeight - 40
-        ) {
+    for (const platform of platforms) {
+        if (platform.y >= mapHeight - 40) {
             continue;
         }
 
-        if (
-            playerIsStandingOnPlatform(
-                player,
-                platform
-            )
-        ) {
-
+        if (playerIsStandingOnPlatform(player, platform)) {
             return platform;
         }
     }
@@ -1058,47 +557,23 @@ function getStandingFloatingPlatform(
     return null;
 }
 
-function playerTouchesSpike(
-    player,
-    spike
-) {
-
-    if (
-        !player ||
-        player.dead ||
-        !spike
-    ) {
+function playerTouchesSpike(player, spike) {
+    if (!player || player.dead || !spike) {
         return false;
     }
 
-    const spikeTop =
-        spike.y -
-        SPIKE_HEIGHT;
-
-    const spikeBottom =
-        spike.y + 2;
+    const spikeTop = spike.y - SPIKE_HEIGHT;
+    const spikeBottom = spike.y + 2;
 
     const horizontalOverlap =
-        player.x +
-        PLAYER_SIZE >
-        spike.x &&
-
-        player.x <
-        spike.x +
-        spike.width;
+        player.x + PLAYER_SIZE > spike.x &&
+        player.x < spike.x + spike.width;
 
     const verticalOverlap =
-        player.y +
-        PLAYER_SIZE >
-        spikeTop &&
+        player.y + PLAYER_SIZE > spikeTop &&
+        player.y < spikeBottom;
 
-        player.y <
-        spikeBottom;
-
-    return (
-        horizontalOverlap &&
-        verticalOverlap
-    );
+    return horizontalOverlap && verticalOverlap;
 }
 
 // =====================================================
@@ -1106,1367 +581,783 @@ function playerTouchesSpike(
 // =====================================================
 
 function updateMapSize() {
+    const useLarge = shouldUseLargeMap();
 
-    const useLarge =
-        shouldUseLargeMap();
+    const desiredWidth = useLarge
+        ? LARGE_MAP_WIDTH
+        : NORMAL_MAP_WIDTH;
 
-    const desiredWidth =
-        useLarge
-            ? LARGE_MAP_WIDTH
-            : NORMAL_MAP_WIDTH;
-
-    const desiredHeight =
-        useLarge
-            ? LARGE_MAP_HEIGHT
-            : NORMAL_MAP_HEIGHT;
+    const desiredHeight = useLarge
+        ? LARGE_MAP_HEIGHT
+        : NORMAL_MAP_HEIGHT;
 
     if (
-        desiredWidth ===
-            mapWidth &&
-        desiredHeight ===
-            mapHeight
+        desiredWidth === mapWidth &&
+        desiredHeight === mapHeight
     ) {
         return;
     }
 
     clearActiveGoldControl();
-
     clearAllSpikes();
 
-    mapWidth =
-        desiredWidth;
+    mapWidth = desiredWidth;
+    mapHeight = desiredHeight;
 
-    mapHeight =
-        desiredHeight;
-
-    platforms =
-        generatePlatforms();
-
+    platforms = generatePlatforms();
     repositionPowerups();
 
     const playerPositions = {};
 
-    for (
-        const id in players
-    ) {
+    for (const id in players) {
+        const player = players[id];
 
-        const player =
-            players[id];
-
-        if (
-            player.dead
-        ) {
+        if (player.dead) {
             continue;
         }
 
-        const position =
-            getSafePlayerPosition();
+        const position = getSafePlayerPosition();
 
-        player.x =
-            position.x;
-
-        player.y =
-            position.y;
+        player.x = position.x;
+        player.y = position.y;
 
         playerPositions[id] = {
-            x:
-                player.x,
-
-            y:
-                player.y,
-
-            facing:
-                player.facing
+            x: player.x,
+            y: player.y,
+            facing: player.facing
         };
     }
 
-    io.emit(
-        "mapChanged",
-        {
-            width:
-                mapWidth,
-
-            height:
-                mapHeight,
-
-            platforms:
-                platforms,
-
-            powerups:
-                powerups,
-
-            playerPositions:
-                playerPositions,
-
-            largeMap:
-                useLarge,
-
-            activeSpikes:
-                activeSpikes
-        }
-    );
+    io.emit("mapChanged", {
+        width: mapWidth,
+        height: mapHeight,
+        platforms,
+        powerups,
+        playerPositions,
+        largeMap: useLarge,
+        activeSpikes
+    });
 }
 
 // =====================================================
-// DAMAGE / DEATH
+// DAMAGE AND DEATH
 // =====================================================
 
-function killPlayer(
-    playerId,
-    killerId
-) {
+function killPlayer(playerId, killerId) {
+    const player = players[playerId];
 
-    const player =
-        players[playerId];
-
-    if (
-        !player ||
-        player.dead
-    ) {
+    if (!player || player.dead) {
         return;
     }
 
-    if (
-        goldControllerId ===
-        playerId
-    ) {
-
+    if (goldControllerId === playerId) {
         pauseGoldControl();
     }
 
-    removeSpikesOwnedBy(
-        playerId
-    );
+    removeSpikesOwnedBy(playerId);
 
     player.health = 0;
-
     player.dead = true;
+    player.respawnAllowedAt = Date.now() + 5000;
 
-    player.respawnAllowedAt =
-        Date.now() +
-        5000;
+    // Drop exactly one random powerup
+    spawnPowerup(randomPowerupType());
 
-    // Death drops exactly one random powerup.
-
-    spawnPowerup(
-        randomPowerupType()
-    );
-
-    // Dead player loses all upgrades.
-
-    player.maxHealth =
-        BASE_MAX_HEALTH;
-
+    // Lose all upgrades
+    player.maxHealth = BASE_MAX_HEALTH;
     player.dashLevel = 0;
-
     player.greenLevel = 0;
-
     player.spikeLevel = 0;
-
     player.spikeReadyAt = 0;
 
-    // =================================================
-    // KILL REWARD
-    //
-    // If another living player caused the death,
-    // that player immediately heals to FULL.
-    // =================================================
+    // The killer heals to full
+    if (killerId && killerId !== playerId) {
+        const killer = players[killerId];
 
-    if (
-        killerId &&
-        killerId !== playerId
-    ) {
+        if (killer && !killer.dead) {
+            killer.health = killer.maxHealth;
 
-        const killer =
-            players[killerId];
-
-        if (
-            killer &&
-            !killer.dead
-        ) {
-
-            killer.health =
-                killer.maxHealth;
-
-            io.emit(
-                "playerHealthChanged",
-                {
-                    id:
-                        killerId,
-
-                    health:
-                        killer.health,
-
-                    maxHealth:
-                        killer.maxHealth,
-
-                    dead:
-                        false,
-
-                    respawnAllowedAt:
-                        killer.respawnAllowedAt
-                }
-            );
+            io.emit("playerHealthChanged", {
+                id: killerId,
+                health: killer.health,
+                maxHealth: killer.maxHealth,
+                dead: false,
+                respawnAllowedAt: killer.respawnAllowedAt
+            });
         }
     }
 
-    io.emit(
-        "playerPowerupChanged",
-        {
-            id:
-                playerId,
+    io.emit("playerPowerupChanged", {
+        id: playerId,
+        health: 0,
+        maxHealth: player.maxHealth,
+        dashLevel: 0,
+        greenLevel: 0,
+        spikeLevel: 0,
+        spikeReadyAt: 0
+    });
 
-            health: 0,
-
-            maxHealth:
-                player.maxHealth,
-
-            dashLevel: 0,
-
-            greenLevel: 0,
-
-            spikeLevel: 0,
-
-            spikeReadyAt: 0
-        }
-    );
-
-    io.emit(
-        "playerHealthChanged",
-        {
-            id:
-                playerId,
-
-            health: 0,
-
-            maxHealth:
-                player.maxHealth,
-
-            dead: true,
-
-            respawnAllowedAt:
-                player.respawnAllowedAt
-        }
-    );
+    io.emit("playerHealthChanged", {
+        id: playerId,
+        health: 0,
+        maxHealth: player.maxHealth,
+        dead: true,
+        respawnAllowedAt: player.respawnAllowedAt
+    });
 }
 
-// =====================================================
-// DAMAGE PLAYER
-// =====================================================
+function damagePlayer(playerId, amount, attackerId) {
+    const player = players[playerId];
 
-function damagePlayer(
-    playerId,
-    amount,
-    attackerId
-) {
-
-    const player =
-        players[playerId];
-
-    if (
-        !player ||
-        player.dead
-    ) {
+    if (!player || player.dead) {
         return;
     }
 
-    player.health -=
-        amount;
+    player.health -= amount;
 
-    if (
-        player.health <= 0
-    ) {
-
-        killPlayer(
-            playerId,
-            attackerId
-        );
-
+    if (player.health <= 0) {
+        killPlayer(playerId, attackerId);
         return;
     }
 
-    io.emit(
-        "playerHealthChanged",
-        {
-            id:
-                playerId,
-
-            health:
-                player.health,
-
-            maxHealth:
-                player.maxHealth,
-
-            dead: false,
-
-            respawnAllowedAt:
-                player.respawnAllowedAt
-        }
-    );
+    io.emit("playerHealthChanged", {
+        id: playerId,
+        health: player.health,
+        maxHealth: player.maxHealth,
+        dead: false,
+        respawnAllowedAt: player.respawnAllowedAt
+    });
 }
 
 // =====================================================
 // SPIKE COLLISION LOOP
 // =====================================================
 
-setInterval(
-    () => {
+setInterval(() => {
+    const now = Date.now();
 
-        const now =
-            Date.now();
+    for (const spikeId in activeSpikes) {
+        const spike = activeSpikes[spikeId];
 
-        for (
-            const spikeId in
-            activeSpikes
-        ) {
+        if (now >= spike.expiresAt) {
+            removeSpike(spikeId);
+            continue;
+        }
 
-            const spike =
-                activeSpikes[
-                    spikeId
-                ];
-
-            // Remove after 30 seconds.
+        for (const playerId in players) {
+            const player = players[playerId];
 
             if (
-                now >=
-                spike.expiresAt
+                !player ||
+                player.dead ||
+                playerId === spike.ownerId
             ) {
-
-                removeSpike(
-                    spikeId
-                );
-
                 continue;
             }
 
-            for (
-                const playerId in
-                players
-            ) {
+            const contactKey = spikeId + ":" + playerId;
 
-                const player =
-                    players[playerId];
+            const touching = playerTouchesSpike(
+                player,
+                spike
+            );
 
-                // Owner cannot be damaged
-                // by their own spikes.
+            if (touching) {
+                if (!spikeContacts.has(contactKey)) {
+                    spikeContacts.add(contactKey);
 
-                if (
-                    !player ||
-                    player.dead ||
-                    playerId ===
-                    spike.ownerId
-                ) {
-
-                    continue;
-                }
-
-                const contactKey =
-                    spikeId +
-                    ":" +
-                    playerId;
-
-                const touching =
-                    playerTouchesSpike(
-                        player,
-                        spike
-                    );
-
-                if (
-                    touching
-                ) {
-
-                    // ONE WHOLE HEART
-                    // when enemy first touches spikes.
-
-                    if (
-                        !spikeContacts.has(
-                            contactKey
-                        )
-                    ) {
-
-                        spikeContacts.add(
-                            contactKey
-                        );
-
-                        damagePlayer(
-                            playerId,
-                            SPIKE_DAMAGE,
-                            spike.ownerId
-                        );
-                    }
-
-                } else {
-
-                    // If they leave and touch
-                    // again, they can take
-                    // another whole heart.
-
-                    spikeContacts.delete(
-                        contactKey
+                    damagePlayer(
+                        playerId,
+                        SPIKE_DAMAGE,
+                        spike.ownerId
                     );
                 }
+            } else {
+                spikeContacts.delete(contactKey);
             }
         }
-
-    },
-    50
-);
+    }
+}, 50);
 
 // =====================================================
 // GOLD PLATFORM LOOP
 // =====================================================
 
-setInterval(
-    () => {
+setInterval(() => {
+    const goldPlatform = getGoldPlatform();
 
-        const goldPlatform =
-            getGoldPlatform();
+    if (!goldPlatform) {
+        return;
+    }
 
+    const standingPlayers = [];
+
+    for (const id in players) {
         if (
-            !goldPlatform
+            playerIsStandingOnPlatform(
+                players[id],
+                goldPlatform
+            )
         ) {
-            return;
+            standingPlayers.push(id);
+        }
+    }
+
+    if (standingPlayers.length !== 1) {
+        if (goldControllerId) {
+            pauseGoldControl();
         }
 
-        const standingPlayers =
-            [];
+        return;
+    }
 
-        for (
-            const id in players
-        ) {
+    const solePlayerId = standingPlayers[0];
 
-            const player =
-                players[id];
-
-            if (
-                playerIsStandingOnPlatform(
-                    player,
-                    goldPlatform
-                )
-            ) {
-
-                standingPlayers.push(
-                    id
-                );
-            }
+    if (goldControllerId !== solePlayerId) {
+        if (goldControllerId) {
+            saveCurrentGoldProgress();
         }
 
-        if (
-            standingPlayers.length !== 1
-        ) {
+        goldControllerId = solePlayerId;
+        goldControlStartedAt = Date.now();
+    }
 
-            if (
-                goldControllerId
-            ) {
+    const savedTime = getSavedGoldTime(solePlayerId);
 
-                pauseGoldControl();
-            }
+    const currentVisitTime =
+        Date.now() - goldControlStartedAt;
 
-            return;
-        }
+    const totalTime = savedTime + currentVisitTime;
 
-        const solePlayerId =
-            standingPlayers[0];
+    const progress = clamp(
+        totalTime / GOLD_PLATFORM_TIME,
+        0,
+        1
+    );
 
-        if (
-            goldControllerId !==
-            solePlayerId
-        ) {
+    const remainingMilliseconds = Math.max(
+        0,
+        GOLD_PLATFORM_TIME - totalTime
+    );
 
-            if (
-                goldControllerId
-            ) {
+    const remainingSeconds =
+        remainingMilliseconds / 1000;
 
-                saveCurrentGoldProgress();
-            }
+    io.emit("goldPlatformStatus", {
+        controllerId: solePlayerId,
+        progress,
+        remaining: remainingSeconds
+    });
 
-            goldControllerId =
-                solePlayerId;
+    if (totalTime >= GOLD_PLATFORM_TIME) {
+        const rewardType = randomPowerupType();
 
-            goldControlStartedAt =
-                Date.now();
-        }
-
-        const savedTime =
-            getSavedGoldTime(
-                solePlayerId
-            );
-
-        const currentVisitTime =
-            Date.now() -
-            goldControlStartedAt;
-
-        const totalTime =
-            savedTime +
-            currentVisitTime;
-
-        const progress =
-            clamp(
-                totalTime /
-                GOLD_PLATFORM_TIME,
-                0,
-                1
-            );
-
-        const remainingMilliseconds =
-            Math.max(
-                0,
-                GOLD_PLATFORM_TIME -
-                totalTime
-            );
-
-        const remainingSeconds =
-            remainingMilliseconds /
-            1000;
-
-        io.emit(
-            "goldPlatformStatus",
-            {
-                controllerId:
-                    solePlayerId,
-
-                progress:
-                    progress,
-
-                remaining:
-                    remainingSeconds
-            }
+        givePowerupToPlayer(
+            solePlayerId,
+            rewardType
         );
 
-        if (
-            totalTime >=
-            GOLD_PLATFORM_TIME
-        ) {
+        io.emit("goldPlatformReward", {
+            playerId: solePlayerId,
+            type: rewardType
+        });
 
-            const rewardType =
-                randomPowerupType();
+        goldSavedProgress[solePlayerId] = 0;
+        goldControlStartedAt = Date.now();
 
-            givePowerupToPlayer(
-                solePlayerId,
-                rewardType
-            );
-
-            io.emit(
-                "goldPlatformReward",
-                {
-                    playerId:
-                        solePlayerId,
-
-                    type:
-                        rewardType
-                }
-            );
-
-            goldSavedProgress[
-                solePlayerId
-            ] = 0;
-
-            goldControlStartedAt =
-                Date.now();
-
-            io.emit(
-                "goldPlatformStatus",
-                {
-                    controllerId:
-                        solePlayerId,
-
-                    progress: 0,
-
-                    remaining: 15
-                }
-            );
-        }
-
-    },
-    100
-);
+        io.emit("goldPlatformStatus", {
+            controllerId: solePlayerId,
+            progress: 0,
+            remaining: 15
+        });
+    }
+}, 100);
 
 // =====================================================
 // PLATFORM RANDOMIZATION
 // =====================================================
 
-setInterval(
-    () => {
+setInterval(() => {
+    clearActiveGoldControl();
+    clearAllSpikes();
 
-        clearActiveGoldControl();
+    platforms = generatePlatforms();
+    repositionPowerups();
 
-        clearAllSpikes();
-
-        platforms =
-            generatePlatforms();
-
-        repositionPowerups();
-
-        io.emit(
-            "platformLayoutChanged",
-            platforms
-        );
-
-        io.emit(
-            "currentPowerups",
-            powerups
-        );
-
-    },
-    PLATFORM_CHANGE_TIME
-);
+    io.emit("platformLayoutChanged", platforms);
+    io.emit("currentPowerups", powerups);
+}, PLATFORM_CHANGE_TIME);
 
 // =====================================================
-// SOCKET CONNECTION
+// SOCKET CONNECTIONS
 // =====================================================
 
-io.on(
-    "connection",
-    (socket) => {
+io.on("connection", socket => {
+    console.log("Player connected:", socket.id);
+
+    players[socket.id] = createPlayer(socket.id);
+
+    if (goldSavedProgress[socket.id] === undefined) {
+        goldSavedProgress[socket.id] = 0;
+    }
+
+    updateMapSize();
+
+    socket.emit("mapState", {
+        width: mapWidth,
+        height: mapHeight,
+        platforms,
+        largeMap: shouldUseLargeMap(),
+        activeSpikes
+    });
+
+    socket.emit("currentPlayers", players);
+    socket.emit("currentPowerups", powerups);
+    socket.emit("currentSpikes", activeSpikes);
+
+    socket.broadcast.emit(
+        "newPlayer",
+        players[socket.id]
+    );
+
+    // =================================================
+    // NICKNAMES - NEW FEATURE
+    // =================================================
+
+    socket.on("setNickname", nickname => {
+        const player = players[socket.id];
+
+        if (!player) {
+            return;
+        }
+
+        player.nickname = cleanNickname(nickname);
+
+        io.emit("nicknameChanged", {
+            id: socket.id,
+            nickname: player.nickname
+        });
 
         console.log(
-            "Player connected:",
+            "Nickname set:",
+            socket.id,
+            player.nickname
+        );
+    });
+
+    // =================================================
+    // PLAYER MOVEMENT
+    // =================================================
+
+    socket.on("playerMove", data => {
+        const player = players[socket.id];
+
+        if (!player || player.dead || !data) {
+            return;
+        }
+
+        player.x = clamp(
+            Number(data.x) || 0,
+            0,
+            mapWidth - PLAYER_SIZE
+        );
+
+        player.y = Number(data.y) || 0;
+
+        player.facing =
+            data.facing === -1 ? -1 : 1;
+
+        socket.broadcast.emit("playerMoved", {
+            id: socket.id,
+            x: player.x,
+            y: player.y,
+            facing: player.facing
+        });
+    });
+
+    // =================================================
+    // ACTIVATE SPIKES
+    // =================================================
+
+    socket.on("activateSpikes", () => {
+        const player = players[socket.id];
+
+        if (
+            !player ||
+            player.dead ||
+            player.spikeLevel <= 0
+        ) {
+            return;
+        }
+
+        const now = Date.now();
+
+        if (now < (player.spikeReadyAt || 0)) {
+            return;
+        }
+
+        const platform =
+            getStandingFloatingPlatform(player);
+
+        if (!platform) {
+            return;
+        }
+
+        removeSpikesOwnedBy(socket.id);
+
+        const spikeId = "spike-" + spikeCounter++;
+        const expiresAt = now + SPIKE_ACTIVE_TIME;
+
+        player.spikeReadyAt = now + SPIKE_COOLDOWN;
+
+        const spike = {
+            id: spikeId,
+            ownerId: socket.id,
+            platformId: platform.id,
+            x: platform.x,
+            y: platform.y,
+            width: platform.width,
+            height: SPIKE_HEIGHT,
+            expiresAt,
+            readyAt: player.spikeReadyAt
+        };
+
+        activeSpikes[spikeId] = spike;
+
+        io.emit("spikeActivated", spike);
+
+        io.emit("playerPowerupChanged", {
+            id: socket.id,
+            health: player.health,
+            maxHealth: player.maxHealth,
+            dashLevel: player.dashLevel,
+            greenLevel: player.greenLevel,
+            spikeLevel: player.spikeLevel,
+            spikeReadyAt: player.spikeReadyAt
+        });
+    });
+
+    // =================================================
+    // KNOCKBACK
+    // =================================================
+
+    socket.on("knockbackPlayer", data => {
+        if (!data) return;
+
+        const target = players[data.targetId];
+        const attacker = players[socket.id];
+
+        if (
+            !target ||
+            target.dead ||
+            !attacker ||
+            attacker.dead
+        ) {
+            return;
+        }
+
+        io.to(data.targetId).emit(
+            "receiveKnockback",
+            {
+                velocityX:
+                    Number(data.velocityX) || 0,
+                velocityY:
+                    Number(data.velocityY) || 0
+            }
+        );
+    });
+
+    // =================================================
+    // NORMAL FIREBALL
+    // =================================================
+
+    socket.on("shootFireball", fireball => {
+        const player = players[socket.id];
+
+        if (!player || player.dead || !fireball) {
+            return;
+        }
+
+        socket.broadcast.emit(
+            "spawnFireball",
+            fireball
+        );
+    });
+
+    socket.on("removeFireball", data => {
+        if (!data) return;
+
+        socket.broadcast.emit(
+            "removeFireball",
+            { id: data.id }
+        );
+    });
+
+    socket.on("fireballHit", data => {
+        if (!data) return;
+
+        const attacker = players[socket.id];
+        const target = players[data.targetId];
+
+        if (
+            !attacker ||
+            attacker.dead ||
+            !target ||
+            target.dead
+        ) {
+            return;
+        }
+
+        damagePlayer(
+            data.targetId,
+            2,
+            socket.id
+        );
+    });
+
+    // =================================================
+    // GREEN FIREBALL
+    // =================================================
+
+    socket.on("shootGreenFireball", fireball => {
+        const player = players[socket.id];
+
+        if (
+            !player ||
+            player.dead ||
+            player.greenLevel <= 0 ||
+            !fireball
+        ) {
+            return;
+        }
+
+        socket.broadcast.emit(
+            "spawnFireball",
+            fireball
+        );
+    });
+
+    socket.on("greenFireballHit", data => {
+        if (!data) return;
+
+        const attacker = players[socket.id];
+        const target = players[data.targetId];
+
+        if (
+            !attacker ||
+            attacker.dead ||
+            attacker.greenLevel <= 0 ||
+            !target ||
+            target.dead
+        ) {
+            return;
+        }
+
+        damagePlayer(
+            data.targetId,
+            1,
             socket.id
         );
 
-        players[socket.id] =
-            createPlayer(
-                socket.id
-            );
+        const direction =
+            data.direction === -1 ? -1 : 1;
+
+        io.to(data.targetId).emit(
+            "receiveKnockback",
+            {
+                velocityX: direction * 60,
+                velocityY: -20
+            }
+        );
+    });
+
+    // =================================================
+    // MELEE
+    // =================================================
+
+    socket.on("meleeSwing", data => {
+        const player = players[socket.id];
 
         if (
-            goldSavedProgress[
-                socket.id
-            ] === undefined
+            !player ||
+            player.dead ||
+            player.greenLevel > 0 ||
+            !data
         ) {
-
-            goldSavedProgress[
-                socket.id
-            ] = 0;
+            return;
         }
 
-        updateMapSize();
-
-        socket.emit(
-            "mapState",
-            {
-                width:
-                    mapWidth,
-
-                height:
-                    mapHeight,
-
-                platforms:
-                    platforms,
-
-                largeMap:
-                    shouldUseLargeMap(),
-
-                activeSpikes:
-                    activeSpikes
-            }
-        );
-
-        socket.emit(
-            "currentPlayers",
-            players
-        );
-
-        socket.emit(
-            "currentPowerups",
-            powerups
-        );
-
-        socket.emit(
-            "currentSpikes",
-            activeSpikes
-        );
-
         socket.broadcast.emit(
-            "newPlayer",
-            players[socket.id]
-        );
-
-        // =================================================
-        // PLAYER MOVEMENT
-        // =================================================
-
-        socket.on(
-            "playerMove",
-            (data) => {
-
-                const player =
-                    players[socket.id];
-
-                if (
-                    !player ||
-                    player.dead
-                ) {
-                    return;
-                }
-
-                player.x =
-                    clamp(
-                        Number(data.x) || 0,
-                        0,
-                        mapWidth -
-                        PLAYER_SIZE
-                    );
-
-                player.y =
-                    Number(data.y) || 0;
-
-                player.facing =
-                    data.facing === -1
-                        ? -1
-                        : 1;
-
-                socket.broadcast.emit(
-                    "playerMoved",
-                    {
-                        id:
-                            socket.id,
-
-                        x:
-                            player.x,
-
-                        y:
-                            player.y,
-
-                        facing:
-                            player.facing
-                    }
-                );
+            "playerMeleeSwing",
+            {
+                id: socket.id,
+                facing: data.facing
             }
         );
+    });
 
-        // =================================================
-        // ACTIVATE SPIKES
-        // =================================================
+    socket.on("meleeHit", data => {
+        if (!data) return;
 
-        socket.on(
-            "activateSpikes",
-            () => {
+        const attacker = players[socket.id];
+        const target = players[data.targetId];
 
-                const player =
-                    players[socket.id];
+        if (
+            !attacker ||
+            attacker.dead ||
+            attacker.greenLevel > 0 ||
+            !target ||
+            target.dead
+        ) {
+            return;
+        }
 
-                if (
-                    !player ||
-                    player.dead ||
-                    player.spikeLevel <= 0
-                ) {
-                    return;
-                }
-
-                const now =
-                    Date.now();
-
-                if (
-                    now <
-                    (
-                        player.spikeReadyAt ||
-                        0
-                    )
-                ) {
-                    return;
-                }
-
-                // Must be standing on a
-                // floating platform.
-                // Ground does not count.
-
-                const platform =
-                    getStandingFloatingPlatform(
-                        player
-                    );
-
-                if (
-                    !platform
-                ) {
-                    return;
-                }
-
-                removeSpikesOwnedBy(
-                    socket.id
-                );
-
-                const spikeId =
-                    "spike-" +
-                    spikeCounter++;
-
-                const expiresAt =
-                    now +
-                    SPIKE_ACTIVE_TIME;
-
-                // 60-second cooldown begins
-                // when spikes are activated.
-
-                player.spikeReadyAt =
-                    now +
-                    SPIKE_COOLDOWN;
-
-                const spike = {
-                    id:
-                        spikeId,
-
-                    ownerId:
-                        socket.id,
-
-                    platformId:
-                        platform.id,
-
-                    x:
-                        platform.x,
-
-                    y:
-                        platform.y,
-
-                    width:
-                        platform.width,
-
-                    height:
-                        SPIKE_HEIGHT,
-
-                    expiresAt:
-                        expiresAt,
-
-                    readyAt:
-                        player.spikeReadyAt
-                };
-
-                activeSpikes[
-                    spikeId
-                ] =
-                    spike;
-
-                io.emit(
-                    "spikeActivated",
-                    spike
-                );
-
-                io.emit(
-                    "playerPowerupChanged",
-                    {
-                        id:
-                            socket.id,
-
-                        health:
-                            player.health,
-
-                        maxHealth:
-                            player.maxHealth,
-
-                        dashLevel:
-                            player.dashLevel,
-
-                        greenLevel:
-                            player.greenLevel,
-
-                        spikeLevel:
-                            player.spikeLevel,
-
-                        spikeReadyAt:
-                            player.spikeReadyAt
-                    }
-                );
-            }
+        damagePlayer(
+            data.targetId,
+            1,
+            socket.id
         );
 
-        // =================================================
-        // KNOCKBACK
-        // =================================================
-
-        socket.on(
-            "knockbackPlayer",
-            (data) => {
-
-                const target =
-                    players[
-                        data.targetId
-                    ];
-
-                const attacker =
-                    players[
-                        socket.id
-                    ];
-
-                if (
-                    !target ||
-                    target.dead ||
-                    !attacker ||
-                    attacker.dead
-                ) {
-                    return;
-                }
-
-                io.to(
-                    data.targetId
-                ).emit(
-                    "receiveKnockback",
-                    {
-                        velocityX:
-                            Number(
-                                data.velocityX
-                            ) || 0,
-
-                        velocityY:
-                            Number(
-                                data.velocityY
-                            ) || 0
-                    }
-                );
+        io.to(data.targetId).emit(
+            "receiveKnockback",
+            {
+                velocityX:
+                    Number(data.velocityX) || 0,
+                velocityY: -2
             }
         );
+    });
 
-        // =================================================
-        // NORMAL FIREBALL
-        // =================================================
+    // =================================================
+    // PICKUP POWERUP
+    // =================================================
 
-        socket.on(
-            "shootFireball",
-            (fireball) => {
+    socket.on("pickupPowerup", powerupId => {
+        const player = players[socket.id];
+        const powerup = powerups[powerupId];
 
-                const player =
-                    players[socket.id];
+        if (
+            !player ||
+            player.dead ||
+            !powerup
+        ) {
+            return;
+        }
 
-                if (
-                    !player ||
-                    player.dead
-                ) {
-                    return;
-                }
+        const playerCenterX =
+            player.x + PLAYER_SIZE / 2;
 
-                socket.broadcast.emit(
-                    "spawnFireball",
-                    fireball
-                );
-            }
+        const playerCenterY =
+            player.y + PLAYER_SIZE / 2;
+
+        const dx = playerCenterX - powerup.x;
+        const dy = playerCenterY - powerup.y;
+
+        const distance = Math.sqrt(
+            dx * dx + dy * dy
         );
 
-        socket.on(
-            "removeFireball",
-            (data) => {
+        if (distance > 60) {
+            return;
+        }
 
-                socket.broadcast.emit(
-                    "removeFireball",
-                    {
-                        id:
-                            data.id
-                    }
-                );
-            }
+        givePowerupToPlayer(
+            socket.id,
+            powerup.type
         );
 
-        socket.on(
-            "fireballHit",
-            (data) => {
+        delete powerups[powerupId];
 
-                const attacker =
-                    players[socket.id];
+        io.emit(
+            "powerupRemoved",
+            powerupId
+        );
+    });
 
-                const target =
-                    players[
-                        data.targetId
-                    ];
+    // =================================================
+    // RESPAWN
+    // =================================================
 
-                if (
-                    !attacker ||
-                    attacker.dead ||
-                    !target ||
-                    target.dead
-                ) {
-                    return;
-                }
+    socket.on("respawnPlayer", () => {
+        const player = players[socket.id];
 
-                // Normal fireball:
-                // 1 full heart damage.
+        if (!player || !player.dead) {
+            return;
+        }
 
-                damagePlayer(
-                    data.targetId,
-                    2,
-                    socket.id
-                );
-            }
+        if (Date.now() < player.respawnAllowedAt) {
+            return;
+        }
+
+        const position = getSafePlayerPosition();
+
+        player.x = position.x;
+        player.y = position.y;
+
+        player.health = BASE_MAX_HEALTH;
+        player.maxHealth = BASE_MAX_HEALTH;
+
+        player.dead = false;
+        player.respawnAllowedAt = 0;
+
+        player.dashLevel = 0;
+        player.greenLevel = 0;
+        player.spikeLevel = 0;
+        player.spikeReadyAt = 0;
+
+        player.facing = 1;
+
+        // Nickname stays the same after respawn
+        io.emit("playerRespawned", {
+            id: socket.id,
+            nickname: player.nickname,
+            x: player.x,
+            y: player.y,
+            health: player.health,
+            maxHealth: player.maxHealth,
+            facing: player.facing,
+            dashLevel: player.dashLevel,
+            greenLevel: player.greenLevel,
+            spikeLevel: player.spikeLevel,
+            spikeReadyAt: player.spikeReadyAt
+        });
+    });
+
+    // =================================================
+    // DISCONNECT
+    // =================================================
+
+    socket.on("disconnect", () => {
+        console.log(
+            "Player disconnected:",
+            socket.id
         );
 
-        // =================================================
-        // GREEN FIREBALL
-        // =================================================
+        if (goldControllerId === socket.id) {
+            pauseGoldControl();
+        }
 
-        socket.on(
-            "shootGreenFireball",
-            (fireball) => {
+        removeSpikesOwnedBy(socket.id);
 
-                const player =
-                    players[socket.id];
+        delete players[socket.id];
+        delete goldSavedProgress[socket.id];
 
-                if (
-                    !player ||
-                    player.dead ||
-                    player.greenLevel <= 0
-                ) {
-                    return;
-                }
-
-                socket.broadcast.emit(
-                    "spawnFireball",
-                    fireball
-                );
-            }
+        io.emit(
+            "playerDisconnected",
+            socket.id
         );
 
-        socket.on(
-            "greenFireballHit",
-            (data) => {
-
-                const attacker =
-                    players[socket.id];
-
-                const target =
-                    players[
-                        data.targetId
-                    ];
-
-                if (
-                    !attacker ||
-                    attacker.dead ||
-                    attacker.greenLevel <= 0 ||
-                    !target ||
-                    target.dead
-                ) {
-                    return;
-                }
-
-                // Green fireball:
-                // half-heart damage.
-
-                damagePlayer(
-                    data.targetId,
-                    1,
-                    socket.id
-                );
-
-                const direction =
-                    data.direction === -1
-                        ? -1
-                        : 1;
-
-                io.to(
-                    data.targetId
-                ).emit(
-                    "receiveKnockback",
-                    {
-                        velocityX:
-                            direction * 60,
-
-                        velocityY:
-                            -20
-                    }
-                );
-            }
-        );
-
-        // =================================================
-        // MELEE
-        // =================================================
-
-        socket.on(
-            "meleeSwing",
-            (data) => {
-
-                const player =
-                    players[socket.id];
-
-                if (
-                    !player ||
-                    player.dead ||
-                    player.greenLevel > 0
-                ) {
-                    return;
-                }
-
-                socket.broadcast.emit(
-                    "playerMeleeSwing",
-                    {
-                        id:
-                            socket.id,
-
-                        facing:
-                            data.facing
-                    }
-                );
-            }
-        );
-
-        socket.on(
-            "meleeHit",
-            (data) => {
-
-                const attacker =
-                    players[socket.id];
-
-                const target =
-                    players[
-                        data.targetId
-                    ];
-
-                if (
-                    !attacker ||
-                    attacker.dead ||
-                    attacker.greenLevel > 0 ||
-                    !target ||
-                    target.dead
-                ) {
-                    return;
-                }
-
-                // Sword:
-                // half-heart damage.
-
-                damagePlayer(
-                    data.targetId,
-                    1,
-                    socket.id
-                );
-
-                io.to(
-                    data.targetId
-                ).emit(
-                    "receiveKnockback",
-                    {
-                        velocityX:
-                            Number(
-                                data.velocityX
-                            ) || 0,
-
-                        velocityY:
-                            -2
-                    }
-                );
-            }
-        );
-
-        // =================================================
-        // PICKUP POWERUP
-        // =================================================
-
-        socket.on(
-            "pickupPowerup",
-            (powerupId) => {
-
-                const player =
-                    players[socket.id];
-
-                const powerup =
-                    powerups[
-                        powerupId
-                    ];
-
-                if (
-                    !player ||
-                    player.dead ||
-                    !powerup
-                ) {
-                    return;
-                }
-
-                const playerCenterX =
-                    player.x +
-                    PLAYER_SIZE / 2;
-
-                const playerCenterY =
-                    player.y +
-                    PLAYER_SIZE / 2;
-
-                const dx =
-                    playerCenterX -
-                    powerup.x;
-
-                const dy =
-                    playerCenterY -
-                    powerup.y;
-
-                const distance =
-                    Math.sqrt(
-                        dx * dx +
-                        dy * dy
-                    );
-
-                if (
-                    distance > 60
-                ) {
-                    return;
-                }
-
-                givePowerupToPlayer(
-                    socket.id,
-                    powerup.type
-                );
-
-                delete powerups[
-                    powerupId
-                ];
-
-                io.emit(
-                    "powerupRemoved",
-                    powerupId
-                );
-            }
-        );
-
-        // =================================================
-        // RESPAWN
-        // =================================================
-
-        socket.on(
-            "respawnPlayer",
-            () => {
-
-                const player =
-                    players[socket.id];
-
-                if (
-                    !player ||
-                    !player.dead
-                ) {
-                    return;
-                }
-
-                if (
-                    Date.now() <
-                    player.respawnAllowedAt
-                ) {
-                    return;
-                }
-
-                const position =
-                    getSafePlayerPosition();
-
-                player.x =
-                    position.x;
-
-                player.y =
-                    position.y;
-
-                player.health =
-                    BASE_MAX_HEALTH;
-
-                player.maxHealth =
-                    BASE_MAX_HEALTH;
-
-                player.dead =
-                    false;
-
-                player.respawnAllowedAt =
-                    0;
-
-                player.dashLevel = 0;
-
-                player.greenLevel = 0;
-
-                player.spikeLevel = 0;
-
-                player.spikeReadyAt = 0;
-
-                player.facing = 1;
-
-                io.emit(
-                    "playerRespawned",
-                    {
-                        id:
-                            socket.id,
-
-                        x:
-                            player.x,
-
-                        y:
-                            player.y,
-
-                        health:
-                            player.health,
-
-                        maxHealth:
-                            player.maxHealth,
-
-                        facing:
-                            player.facing,
-
-                        dashLevel:
-                            player.dashLevel,
-
-                        greenLevel:
-                            player.greenLevel,
-
-                        spikeLevel:
-                            player.spikeLevel,
-
-                        spikeReadyAt:
-                            player.spikeReadyAt
-                    }
-                );
-            }
-        );
-
-        // =================================================
-        // DISCONNECT
-        // =================================================
-
-        socket.on(
-            "disconnect",
-            () => {
-
-                console.log(
-                    "Player disconnected:",
-                    socket.id
-                );
-
-                if (
-                    goldControllerId ===
-                    socket.id
-                ) {
-
-                    pauseGoldControl();
-                }
-
-                removeSpikesOwnedBy(
-                    socket.id
-                );
-
-                delete players[
-                    socket.id
-                ];
-
-                delete goldSavedProgress[
-                    socket.id
-                ];
-
-                io.emit(
-                    "playerDisconnected",
-                    socket.id
-                );
-
-                updateMapSize();
-            }
-        );
-    }
-);
+        updateMapSize();
+    });
+});
 
 // =====================================================
 // START SERVER
 // =====================================================
 
-const PORT =
-    process.env.PORT ||
-    3000;
+const PORT = process.env.PORT || 3000;
 
-server.listen(
-    PORT,
-    "0.0.0.0",
-    () => {
-
-        console.log(
-            "BLOCK BATTLE IS RUNNING!"
-        );
-
-        console.log(
-            "Server running on port",
-            PORT
-        );
-    }
-);
+server.listen(PORT, "0.0.0.0", () => {
+    console.log("BLOCK BATTLE IS RUNNING!");
+    console.log("Server running on port", PORT);
+});
