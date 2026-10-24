@@ -4,8 +4,8 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 // =====================================================
-// APPLE BATTLE - COMPLETE GAME.JS
-// APPLE GRAPHICS + HUD OUTSIDE PLAYING AREA
+// BLOCK BATTLE - GAME.JS
+// ORIGINAL GRAPHICS + HUD OUTSIDE PLAYING AREA
 // =====================================================
 
 const PLAYER_SIZE = 30;
@@ -431,8 +431,8 @@ socket.on("goldPlatformReward", data => {
     const names = {
         health: "HEALTH",
         dash: "DASH",
-        greenFireball: "GREEN APPLE",
-        spike: "APPLE CORE SPIKES"
+        greenFireball: "GREEN FIREBALL",
+        spike: "SPIKES"
     };
 
     goldRewardMessage =
@@ -905,7 +905,7 @@ function performMeleeAttack() {
 }
 
 // =====================================================
-// RED APPLE FIREBALL
+// RED FIREBALL
 // =====================================================
 
 function shootNormalFireball() {
@@ -934,7 +934,7 @@ function shootNormalFireball() {
 }
 
 // =====================================================
-// GREEN APPLE FIREBALL
+// GREEN FIREBALL
 // =====================================================
 
 function shootGreenFireball() {
@@ -1228,240 +1228,48 @@ function updatePlayer() {
 }
 
 // =====================================================
-// CARTOON APPLE GRAPHICS
+// ORIGINAL GRAPHICS
 // =====================================================
 
-function drawApple(
-    x,
-    y,
-    size,
-    color,
-    showFace = false,
-    direction = 1
-) {
-    ctx.save();
+function drawEye(player) {
+    const direction = player.facing === -1 ? -1 : 1;
 
-    const cx = x + size / 2;
+    const eyeX = direction === 1
+        ? player.x + PLAYER_SIZE - 9
+        : player.x + 4;
 
-    ctx.fillStyle = color;
+    ctx.fillStyle = "#000000";
     ctx.beginPath();
-
-    ctx.moveTo(cx, y + size * 0.18);
-
-    ctx.bezierCurveTo(
-        x + size * 0.08,
-        y - size * 0.02,
-        x - size * 0.07,
-        y + size * 0.35,
-        x + size * 0.08,
-        y + size * 0.75
-    );
-
-    ctx.bezierCurveTo(
-        x + size * 0.2,
-        y + size * 1.06,
-        cx - size * 0.08,
-        y + size * 1.03,
-        cx,
-        y + size * 0.96
-    );
-
-    ctx.bezierCurveTo(
-        cx + size * 0.08,
-        y + size * 1.03,
-        x + size * 0.8,
-        y + size * 1.06,
-        x + size * 0.92,
-        y + size * 0.75
-    );
-
-    ctx.bezierCurveTo(
-        x + size * 1.07,
-        y + size * 0.35,
-        x + size * 0.92,
-        y - size * 0.02,
-        cx,
-        y + size * 0.18
-    );
-
-    ctx.closePath();
+    ctx.roundRect(eyeX, player.y + 7, 5, 13, 3);
     ctx.fill();
-
-    ctx.strokeStyle = "#242424";
-    ctx.lineWidth = Math.max(1.5, size * 0.055);
-    ctx.stroke();
-
-    ctx.strokeStyle = "#73441f";
-    ctx.lineWidth = Math.max(2, size * 0.09);
-    ctx.lineCap = "round";
-
-    ctx.beginPath();
-    ctx.moveTo(cx, y + size * 0.17);
-    ctx.lineTo(cx + size * 0.04, y - size * 0.05);
-    ctx.stroke();
-
-    ctx.fillStyle = "#43c74b";
-    ctx.beginPath();
-
-    ctx.ellipse(
-        cx + size * 0.2,
-        y + size * 0.035,
-        size * 0.23,
-        size * 0.1,
-        -0.5,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    ctx.beginPath();
-
-    ctx.ellipse(
-        x + size * 0.25,
-        y + size * 0.36,
-        size * 0.08,
-        size * 0.15,
-        -0.35,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    if (showFace) {
-        ctx.fillStyle = "#ffffff";
-
-        for (const offset of [-0.16, 0.16]) {
-            ctx.beginPath();
-
-            ctx.ellipse(
-                cx + size * offset,
-                y + size * 0.48,
-                size * 0.115,
-                size * 0.155,
-                0,
-                0,
-                Math.PI * 2
-            );
-
-            ctx.fill();
-        }
-
-        ctx.fillStyle = "#181818";
-
-        for (const offset of [-0.16, 0.16]) {
-            ctx.beginPath();
-
-            ctx.arc(
-                cx +
-                    size * offset +
-                    direction * size * 0.035,
-                y + size * 0.49,
-                Math.max(1.5, size * 0.05),
-                0,
-                Math.PI * 2
-            );
-
-            ctx.fill();
-        }
-
-        ctx.strokeStyle = "#48251c";
-        ctx.lineWidth = Math.max(1.2, size * 0.045);
-        ctx.beginPath();
-
-        ctx.arc(
-            cx,
-            y + size * 0.65,
-            size * 0.12,
-            0.15,
-            Math.PI - 0.15
-        );
-
-        ctx.stroke();
-    }
-
-    ctx.restore();
 }
 
-// =====================================================
-// APPLE TREE BRANCHES
-// =====================================================
+function drawPlatform(platform) {
+    ctx.fillStyle =
+        platform.isGold ? "#ffd700" : "#dddddd";
 
-function drawBranch(platform) {
-    const x = platform.x;
-    const y = platform.y;
-    const w = platform.width;
-    const h = platform.height;
-
-    ctx.save();
-
-    ctx.fillStyle = "#86532d";
-    ctx.fillRect(x, y, w, h);
-
-    ctx.fillStyle = "#543019";
-    ctx.fillRect(x, y + h - 5, w, 5);
-
-    ctx.fillStyle = "#3cba50";
-    ctx.fillRect(x, y, w, 6);
-
-    for (let i = 14; i < w - 5; i += 26) {
-        ctx.beginPath();
-
-        ctx.ellipse(
-            x + i,
-            y + 2,
-            11,
-            5,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-    }
-
-    ctx.strokeStyle = "#ac7444";
-    ctx.lineWidth = 2;
-
-    for (let i = 15; i < w - 10; i += 48) {
-        ctx.beginPath();
-
-        ctx.moveTo(
-            x + i,
-            y + h * 0.58
-        );
-
-        ctx.lineTo(
-            x + Math.min(i + 24, w - 5),
-            y + h * 0.58
-        );
-
-        ctx.stroke();
-    }
+    ctx.fillRect(
+        platform.x,
+        platform.y,
+        platform.width,
+        platform.height
+    );
 
     if (platform.isGold) {
-        ctx.fillStyle = "#ffd633";
-        ctx.fillRect(x, y, w, 7);
-
-        ctx.strokeStyle = "#ffed86";
+        ctx.strokeStyle = "#fff4a3";
         ctx.lineWidth = 3;
-        ctx.strokeRect(x, y, w, h);
 
-        drawApple(
-            x + w / 2 - 11,
-            y - 23,
-            22,
-            "#ffd633"
+        ctx.strokeRect(
+            platform.x,
+            platform.y,
+            platform.width,
+            platform.height
         );
     }
-
-    ctx.restore();
 }
 
 // =====================================================
-// APPLE SLICE SWORD
+// SWORD
 // =====================================================
 
 function drawSword(player, swing) {
@@ -1469,54 +1277,57 @@ function drawSword(player, swing) {
     if (elapsed > SWORD_SWING_TIME) return;
 
     const progress = elapsed / SWORD_SWING_TIME;
-    const direction = swing.facing === -1 ? -1 : 1;
+
+    const startAngle =
+        swing.facing === 1 ? -1.1 : Math.PI + 1.1;
+
+    const endAngle =
+        swing.facing === 1 ? 0.8 : Math.PI - 0.8;
 
     const angle =
-        direction === 1
-            ? -1.1 + progress * 2
-            : Math.PI + 1.1 - progress * 2;
+        startAngle + (endAngle - startAngle) * progress;
 
     const handX = player.x + PLAYER_SIZE / 2;
     const handY = player.y + PLAYER_SIZE / 2;
 
-    ctx.save();
-    ctx.translate(handX, handY);
-    ctx.rotate(angle);
+    const handleX = handX + Math.cos(angle) * 8;
+    const handleY = handY + Math.sin(angle) * 8;
 
-    ctx.fillStyle = "#ed4040";
+    const tipX = handX + Math.cos(angle) * 46;
+    const tipY = handY + Math.sin(angle) * 46;
+
+    ctx.strokeStyle = "#8b5a2b";
+    ctx.lineWidth = 7;
     ctx.beginPath();
-    ctx.moveTo(6, -12);
-    ctx.quadraticCurveTo(42, -19, 48, 0);
-    ctx.quadraticCurveTo(42, 19, 6, 12);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(handX, handY);
+    ctx.lineTo(handleX, handleY);
+    ctx.stroke();
 
-    ctx.fillStyle = "#fff0bc";
+    ctx.strokeStyle = "#e8edf2";
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.moveTo(10, -9);
-    ctx.quadraticCurveTo(37, -12, 43, 0);
-    ctx.quadraticCurveTo(37, 12, 10, 9);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(handleX, handleY);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
 
-    ctx.fillStyle = "#633b20";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.ellipse(24, 0, 5, 2.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
+    ctx.moveTo(handleX, handleY);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
 }
 
 // =====================================================
-// APPLE POWERUPS
+// POWERUPS
 // =====================================================
 
 function drawPowerup(powerup) {
     const colors = {
-        health: "#ff4545",
-        dash: "#49c9ff",
-        greenFireball: "#36e55a",
-        spike: "#bc72ff"
+        health: "#ff3b30",
+        dash: "#4fd5ff",
+        greenFireball: "#32ff5a",
+        spike: "#a970ff"
     };
 
     const letters = {
@@ -1526,32 +1337,37 @@ function drawPowerup(powerup) {
         spike: "E"
     };
 
-    const size = 25;
-
-    drawApple(
-        powerup.x - size / 2,
-        powerup.y - size / 2,
-        size,
-        colors[powerup.type] || "#ff4545"
+    ctx.beginPath();
+    ctx.arc(
+        powerup.x,
+        powerup.y,
+        POWERUP_RADIUS,
+        0,
+        Math.PI * 2
     );
 
-    ctx.save();
-    ctx.font = "bold 16px Arial";
-    ctx.textAlign = "center";
+    ctx.fillStyle = colors[powerup.type] || "#32ff5a";
+    ctx.fill();
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
     ctx.fillStyle = "#ffffff";
-    ctx.strokeStyle = "#333333";
-    ctx.lineWidth = 3;
+    ctx.font = "bold 15px Arial";
+    ctx.textAlign = "center";
 
-    const letter = letters[powerup.type] || "?";
+    ctx.fillText(
+        letters[powerup.type] || "F",
+        powerup.x,
+        powerup.y + 5
+    );
 
-    ctx.strokeText(letter, powerup.x, powerup.y + 6);
-    ctx.fillText(letter, powerup.x, powerup.y + 6);
-
-    ctx.restore();
+    ctx.textAlign = "left";
 }
 
 // =====================================================
-// APPLE CORE SPIKES
+// SPIKES
 // =====================================================
 
 function drawActiveSpikes() {
@@ -1567,58 +1383,75 @@ function drawActiveSpikes() {
             continue;
         }
 
-        ctx.save();
-
-        const color =
+        ctx.fillStyle =
             spike.ownerId === myId
-                ? "#b66bff"
-                : "#ff5555";
+                ? "#a970ff"
+                : "#ff5c7a";
 
         for (
-            let x = spike.x + 8;
-            x < spike.x + spike.width - 5;
-            x += 22
+            let x = spike.x;
+            x < spike.x + spike.width;
+            x += 18
         ) {
-            ctx.fillStyle = color;
+            const right = Math.min(
+                x + 18,
+                spike.x + spike.width
+            );
+
+            const middle = (x + right) / 2;
+
             ctx.beginPath();
-            ctx.moveTo(x - 8, spike.y);
-            ctx.lineTo(x, spike.y - 20);
-            ctx.lineTo(x + 8, spike.y);
+            ctx.moveTo(x, spike.y);
+            ctx.lineTo(middle, spike.y - 18);
+            ctx.lineTo(right, spike.y);
             ctx.closePath();
             ctx.fill();
-
-            ctx.fillStyle = "#3c261a";
-            ctx.beginPath();
-            ctx.arc(x, spike.y - 6, 2, 0, Math.PI * 2);
-            ctx.fill();
         }
-
-        ctx.restore();
     }
 }
 
 // =====================================================
-// FLYING APPLES
+// FIREBALLS
 // =====================================================
 
-function drawFlyingApple(fireball) {
-    const size = fireball.radius * 2 + 5;
+function drawFireball(fireball) {
+    ctx.beginPath();
 
-    const color =
-        fireball.type === "green"
-            ? "#36e55a"
-            : "#f44336";
-
-    drawApple(
-        fireball.x - size / 2,
-        fireball.y - size / 2,
-        size,
-        color
+    ctx.arc(
+        fireball.x,
+        fireball.y,
+        fireball.radius,
+        0,
+        Math.PI * 2
     );
+
+    ctx.fillStyle =
+        fireball.type === "green"
+            ? "#00ff55"
+            : "#ff7b00";
+
+    ctx.fill();
+
+    ctx.beginPath();
+
+    ctx.arc(
+        fireball.x,
+        fireball.y,
+        Math.max(3, fireball.radius / 2),
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fillStyle =
+        fireball.type === "green"
+            ? "#c8ff00"
+            : "#ffe600";
+
+    ctx.fill();
 }
 
 // =====================================================
-// CARTOON APPLE PLAYERS
+// CUBE PLAYERS
 // =====================================================
 
 function drawPlayer(id, player) {
@@ -1627,14 +1460,9 @@ function drawPlayer(id, player) {
     ctx.save();
     ctx.globalAlpha = player.dead ? 0.25 : 1;
 
-    drawApple(
-        player.x,
-        player.y,
-        PLAYER_SIZE,
-        player.color || "#ff4545",
-        true,
-        player.facing || 1
-    );
+    ctx.fillStyle = player.color || "#ffffff";
+    ctx.fillRect(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
+    drawEye(player);
 
     ctx.restore();
 
@@ -1739,19 +1567,19 @@ function drawHealthPanel() {
     healthCtx.font = "12px Arial";
 
     healthCtx.fillText(
-        "F = Apple Slice / Green Apple",
+        "F = Sword / Green Fireball",
         13,
         106
     );
 
     healthCtx.fillText(
-        "G = Dash | E = Apple Spikes",
+        "G = Dash | E = Spikes",
         13,
         124
     );
 
     healthCtx.fillText(
-        "DOWN = Drop through branch",
+        "DOWN = Drop through platform",
         13,
         142
     );
@@ -1772,7 +1600,7 @@ function drawPowerupPanel() {
 
     powerupCtx.fillStyle = "#ffffff";
     powerupCtx.font = "bold 14px Arial";
-    powerupCtx.fillText("APPLE POWERUPS", 15, 21);
+    powerupCtx.fillText("POWERUPS", 15, 21);
 
     const bonusHearts = Math.max(
         0,
@@ -1835,7 +1663,7 @@ function drawPowerupPanel() {
         );
 
         powerupCtx.fillText(
-            "Green Apple Lv " +
+            "Green Fireball Lv " +
                 me.greenLevel +
                 ": " +
                 (
@@ -1848,7 +1676,7 @@ function drawPowerupPanel() {
         );
     } else {
         powerupCtx.fillText(
-            "Green Apple: locked",
+            "Green Fireball: locked",
             15,
             112
         );
@@ -1891,13 +1719,13 @@ function drawPowerupPanel() {
         }
 
         powerupCtx.fillText(
-            "Apple Spikes: " + status,
+            "Spikes: " + status,
             15,
             136
         );
     } else {
         powerupCtx.fillText(
-            "Apple Spikes: locked",
+            "Spikes: locked",
             15,
             136
         );
@@ -1906,7 +1734,7 @@ function drawPowerupPanel() {
     powerupCtx.fillStyle = "#ffd700";
 
     powerupCtx.fillText(
-        "Golden apple: 15 sec reward",
+        "Gold platform: 15 sec reward",
         15,
         160
     );
@@ -1925,7 +1753,7 @@ function drawChargingBars() {
     const width = 280;
     const x = 150;
 
-    // Red apple charge
+    // Red fireball charge
     if (spaceHeld) {
         const charge = Math.min(
             (Date.now() - spacePressedAt) /
@@ -1944,8 +1772,8 @@ function drawChargingBars() {
 
         chargeCtx.fillText(
             charge >= 1
-                ? "RED APPLE READY!"
-                : "CHARGING RED APPLE",
+                ? "FIREBALL READY!"
+                : "CHARGING FIREBALL",
             290,
             y + 18
         );
@@ -1987,7 +1815,7 @@ function drawChargingBars() {
         );
     }
 
-    // Golden apple platform progress
+    // Gold platform progress
     if (goldControllerId === myId) {
         const y = 83;
 
@@ -1999,7 +1827,7 @@ function drawChargingBars() {
         chargeCtx.textAlign = "center";
 
         chargeCtx.fillText(
-            "GOLDEN APPLE BRANCH",
+            "GOLD PLATFORM",
             290,
             y + 18
         );
@@ -2075,7 +1903,7 @@ function drawRespawnScreen(me) {
     ctx.textAlign = "center";
 
     ctx.fillText(
-        "SQUISHED APPLE!",
+        "YOU DIED",
         canvas.width / 2,
         canvas.height / 2 - 70
     );
@@ -2167,7 +1995,7 @@ function draw() {
 
     // Platforms
     for (const platform of platforms) {
-        drawBranch(platform);
+        drawPlatform(platform);
     }
 
     // Spikes
@@ -2185,7 +2013,7 @@ function draw() {
 
     // Fireballs
     for (const fireball of fireballs) {
-        drawFlyingApple(fireball);
+        drawFireball(fireball);
     }
 
     // Temporary game messages
@@ -2207,7 +2035,7 @@ function draw() {
 
     if (Date.now() < platformMessageUntil) {
         drawCenteredMessage(
-            "NEW APPLE TREE BRANCHES!",
+            "NEW PLATFORM LAYOUT!",
             "#ffffff"
         );
     }
