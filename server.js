@@ -44,6 +44,24 @@ const POWERUP_TYPES = [
 // =====================================================
 
 let players = {};
+// Retain authoritative player state across browser refreshes until server restart.
+const playerSessions = new Map();
+
+function nicknameTaken(nickname, owner) {
+    const key = nickname.toLowerCase();
+    return [...playerSessions.values()].some(session =>
+        session !== owner && session.player.nickname.toLowerCase() === key
+    ) || Object.values(players).some(player =>
+        player !== owner.player && player.nickname.toLowerCase() === key
+    );
+}
+
+function availableNickname(owner) {
+    let nickname = "PLAYER";
+    let suffix = 2;
+    while (nicknameTaken(nickname, owner)) nickname = "PLAYER " + suffix++;
+    return nickname;
+}
 let powerups = {};
 let powerupCounter = 0;
 
@@ -895,7 +913,22 @@ setInterval(() => {
 io.on("connection", socket => {
     console.log("Player connected:", socket.id);
 
-    players[socket.id] = createPlayer(socket.id);
+    const token = socket.handshake.auth?.playerToken;
+    const sessionKey = typeof token === "string" && /^[a-f0-9]{64}$/.test(token)
+        ? token : null;
+    let session = sessionKey ? playerSessions.get(sessionKey) : null;
+    if (session?.socketId) {
+        // One active connection per browser identity, including overlapping refreshes.
+        io.sockets.sockets.get(session.socketId)?.disconnect(true);
+    }
+    if (!session) {
+        session = { player: createPlayer(socket.id), socketId: null };
+        session.player.nickname = availableNickname(session);
+        if (sessionKey) playerSessions.set(sessionKey, session);
+    }
+    session.socketId = socket.id;
+    session.player.id = socket.id;
+    players[socket.id] = session.player;
 
     if (goldSavedProgress[socket.id] === undefined) {
         goldSavedProgress[socket.id] = 0;
@@ -931,7 +964,16 @@ io.on("connection", socket => {
             return;
         }
 
-        player.nickname = cleanNickname(nickname);
+        const requested = cleanNickname(nickname);
+        if (nicknameTaken(requested, session)) {
+            socket.emit("nicknameRejected", {
+                nickname: player.nickname,
+                message: "That name is already taken. Choose another name."
+            });
+            return;
+        }
+        player.nickname = requested;
+        socket.emit("nicknameAccepted", player.nickname);
 
         io.emit("nicknameChanged", {
             id: socket.id,
@@ -1339,6 +1381,7 @@ io.on("connection", socket => {
 
         removeSpikesOwnedBy(socket.id);
 
+        if (session.socketId === socket.id) session.socketId = null;
         delete players[socket.id];
         delete goldSavedProgress[socket.id];
 

@@ -1,5 +1,16 @@
 
-const socket = io();
+let playerToken;
+try {
+    playerToken = localStorage.getItem("blockBattlePlayerToken");
+} catch (error) {}
+if (!/^[a-f0-9]{64}$/.test(playerToken || "")) {
+    playerToken = Array.from(crypto.getRandomValues(new Uint8Array(32)),
+        byte => byte.toString(16).padStart(2, "0")).join("");
+    try {
+        localStorage.setItem("blockBattlePlayerToken", playerToken);
+    } catch (error) {}
+}
+const socket = io({ auth: { playerToken } });
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -214,22 +225,7 @@ function saveNickname() {
         return;
     }
 
-    myNickname = nickname;
-    nicknameInput.value = nickname;
-
-    try {
-        localStorage.setItem(
-            "blockBattleNickname",
-            nickname
-        );
-    } catch (error) {}
-
     socket.emit("setNickname", nickname);
-
-    if (nicknameStatus) {
-        nicknameStatus.textContent =
-            "Nickname saved: " + nickname;
-    }
 
     nicknameInput.blur();
 }
@@ -254,6 +250,24 @@ if (nicknameInput) {
 if (nicknameButton) {
     nicknameButton.addEventListener("click", saveNickname);
 }
+
+function storeAcceptedNickname(nickname) {
+    myNickname = nickname;
+    if (nicknameInput) nicknameInput.value = nickname;
+    try {
+        localStorage.setItem("blockBattleNickname", nickname);
+    } catch (error) {}
+}
+
+socket.on("nicknameAccepted", nickname => {
+    storeAcceptedNickname(nickname);
+    if (nicknameStatus) nicknameStatus.textContent = "Nickname saved: " + nickname;
+});
+
+socket.on("nicknameRejected", data => {
+    storeAcceptedNickname(data.nickname);
+    if (nicknameStatus) nicknameStatus.textContent = data.message;
+});
 
 socket.on("nicknameChanged", data => {
     if (data && players[data.id]) {
