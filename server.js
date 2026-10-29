@@ -49,9 +49,8 @@ const playerSessions = new Map();
 
 function nicknameTaken(nickname, owner) {
     const key = nickname.toLowerCase();
-    return [...playerSessions.values()].some(session =>
-        session !== owner && session.player.nickname.toLowerCase() === key
-    ) || Object.values(players).some(player =>
+    // Disconnected sessions keep their stats, but do not reserve a name.
+    return Object.values(players).some(player =>
         player !== owner.player && player.nickname.toLowerCase() === key
     );
 }
@@ -925,6 +924,10 @@ io.on("connection", socket => {
         session = { player: createPlayer(socket.id), socketId: null };
         session.player.nickname = availableNickname(session);
         if (sessionKey) playerSessions.set(sessionKey, session);
+    }
+    // Someone else may have claimed this name while this player was away.
+    if (nicknameTaken(session.player.nickname, session)) {
+        session.player.nickname = availableNickname(session);
     }
     session.socketId = socket.id;
     session.player.id = socket.id;
