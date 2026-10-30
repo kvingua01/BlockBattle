@@ -2109,13 +2109,37 @@ canvas.addEventListener("click", event => {
 // GAME LOOP
 // =====================================================
 
-function gameLoop() {
-    updatePlayer();
-    updateFireballs();
-    updatePowerupPickup();
-    draw();
+// Keep the original 60 Hz physics independent of the display refresh rate.
+const PHYSICS_STEP_MS = 1000 / 60;
+const MAX_FRAME_TIME_MS = 250;
+let lastFrameTime = null;
+let physicsAccumulator = 0;
 
+document.addEventListener("visibilitychange", () => {
+    // Do not simulate time spent in a background tab when it becomes visible.
+    lastFrameTime = null;
+    physicsAccumulator = 0;
+});
+
+function gameLoop(timestamp) {
+    if (lastFrameTime !== null) {
+        physicsAccumulator += Math.min(
+            Math.max(0, timestamp - lastFrameTime),
+            MAX_FRAME_TIME_MS
+        );
+    }
+    lastFrameTime = timestamp;
+
+    // Slower displays run multiple small physics steps per rendered frame.
+    // A bounded backlog prevents huge jumps after a stalled frame.
+    while (physicsAccumulator + 1e-7 >= PHYSICS_STEP_MS) {
+        updatePlayer();
+        updateFireballs();
+        updatePowerupPickup();
+        physicsAccumulator = Math.max(0, physicsAccumulator - PHYSICS_STEP_MS);
+    }
+    draw();
     requestAnimationFrame(gameLoop);
 }
 
-gameLoop();
+requestAnimationFrame(gameLoop);
